@@ -43,6 +43,74 @@ class MidiInputProcessorImpl : MidiInputProcessor {
     }
 
     try {
+      // Log the raw bytes for debugging
+      val hexData = data.slice(offset until offset + length).joinToString(" ") { 
+        "0x${it.toInt().and(0xFF).toString(16).padStart(2, '0')}" 
+      }
+      Log.d(TAG, "Processing MIDI data: $hexData")
+      
+      // Check for USB-MIDI format (4 bytes per message)
+      if (length >= 4 && (data[offset].toInt() and 0xF0) == 0x00) {
+        // This might be USB-MIDI format (4 bytes per message)
+        // Byte 0: Cable Number (CN) and Code Index Number (CIN)
+        // Bytes 1-3: MIDI data
+        val cin = data[offset].toInt() and 0x0F
+        
+        // Check if this is a valid CIN
+        if (cin >= 0x08 && cin <= 0x0E) {
+          Log.d(TAG, "Detected USB-MIDI format, CIN: $cin")
+          
+          // Extract the MIDI data
+          val statusByte = data[offset + 1]
+          val data1 = data[offset + 2].toInt() and 0xFF
+          val data2 = data[offset + 3].toInt() and 0xFF
+          
+          // Parse the status byte
+          val command = statusByte.toInt() and 0xF0
+          val channel = statusByte.toInt() and 0x0F
+          
+          Log.d(TAG, "USB-MIDI: Command: 0x${command.toString(16)}, Channel: $channel, Data1: $data1, Data2: $data2")
+          
+          return when (command) {
+            0x80 -> { // Note Off
+              Log.d(TAG, "USB-MIDI Note Off: note=$data1, velocity=$data2")
+              MidiEvent(
+                type = MidiEventType.NOTE_OFF,
+                channel = channel,
+                data1 = data1,
+                data2 = data2,
+                timestamp = timestamp
+              )
+            }
+            0x90 -> { // Note On
+              Log.d(TAG, "USB-MIDI Note On: note=$data1, velocity=$data2")
+              MidiEvent(
+                type = MidiEventType.NOTE_ON,
+                channel = channel,
+                data1 = data1,
+                data2 = data2,
+                timestamp = timestamp
+              )
+            }
+            0xB0 -> { // Control Change
+              Log.d(TAG, "USB-MIDI Control Change: controller=$data1, value=$data2")
+              MidiEvent(
+                type = MidiEventType.CONTROL_CHANGE,
+                channel = channel,
+                data1 = data1,
+                data2 = data2,
+                timestamp = timestamp
+              )
+            }
+            else -> {
+              Log.w(TAG, "Unsupported USB-MIDI command: 0x${command.toString(16)}")
+              null
+            }
+          }
+        }
+      }
+      
+      // If not USB-MIDI format, try standard MIDI format
       var currentOffset = offset
       val statusByte = data[currentOffset]
       Log.d(TAG, "Processing status byte: 0x${statusByte.toInt().and(0xFF).toString(16)}")

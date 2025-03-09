@@ -160,9 +160,14 @@ class MainActivity : AppCompatActivity() {
     
     // Add all USB devices to the list
     deviceList.forEach { (name, device) ->
-      deviceMap[name] = device
-      deviceNames.add(name)
-      Log.d(TAG, "Found USB device: $name (ID: ${device.deviceId})")
+      // Create a more descriptive name for the device
+      val vendorId = "0x${device.vendorId.toString(16).uppercase()}"
+      val productId = "0x${device.productId.toString(16).uppercase()}"
+      val displayName = "$name (VID:$vendorId, PID:$productId)"
+      
+      deviceMap[displayName] = device
+      deviceNames.add(displayName)
+      Log.d(TAG, "Found USB device: $displayName (ID: ${device.deviceId})")
     }
     
     // Update the adapter
@@ -173,7 +178,7 @@ class MainActivity : AppCompatActivity() {
     // Show a message
     Toast.makeText(this, "Found ${deviceList.size} USB devices", Toast.LENGTH_SHORT).show()
     
-    // If we have devices, try to connect to the first one
+    // If we have devices, show details for the first one
     if (deviceNames.isNotEmpty()) {
       val firstDevice = deviceMap[deviceNames[0]]
       firstDevice?.let {

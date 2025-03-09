@@ -181,49 +181,114 @@ class MidiDeviceManagerImpl(
     val deviceList = usbManager.deviceList
     Log.d(TAG, "Found ${deviceList.size} USB devices via UsbManager")
     
+    val midiDevices = mutableListOf<UsbDevice>()
+    
     // Log details about each device
     deviceList.forEach { (name, device) ->
-      Log.d(TAG, "USB Device: $name")
+      Log.d(TAG, "=== USB Device: $name ===")
       Log.d(TAG, "  Device ID: ${device.deviceId}")
-      Log.d(TAG, "  Product ID: ${device.productId}")
-      Log.d(TAG, "  Vendor ID: ${device.vendorId}")
+      Log.d(TAG, "  Product ID: 0x${device.productId.toString(16).uppercase()} (${device.productId})")
+      Log.d(TAG, "  Vendor ID: 0x${device.vendorId.toString(16).uppercase()} (${device.vendorId})")
       Log.d(TAG, "  Device Class: ${device.deviceClass}")
       Log.d(TAG, "  Device Subclass: ${device.deviceSubclass}")
       Log.d(TAG, "  Interface Count: ${device.interfaceCount}")
       
       // Check if this device has a MIDI interface
       var hasMidiInterface = false
+      var potentialMidiInterface = false
+      
+      // Log all interfaces
       for (i in 0 until device.interfaceCount) {
         val usbInterface = device.getInterface(i)
-        if (usbInterface.interfaceClass == 1 && usbInterface.interfaceSubclass == 3) {
+        val interfaceClass = usbInterface.interfaceClass
+        val interfaceSubclass = usbInterface.interfaceSubclass
+        
+        Log.d(TAG, "  Interface $i: Class ${interfaceClass} (0x${interfaceClass.toString(16)}), Subclass ${interfaceSubclass} (0x${interfaceSubclass.toString(16)})")
+        
+        // Log all endpoints for this interface
+        for (j in 0 until usbInterface.endpointCount) {
+          val endpoint = usbInterface.getEndpoint(j)
+          val direction = if (endpoint.direction == android.hardware.usb.UsbConstants.USB_DIR_IN) "IN" else "OUT"
+          val type = when (endpoint.type) {
+            android.hardware.usb.UsbConstants.USB_ENDPOINT_XFER_CONTROL -> "CONTROL"
+            android.hardware.usb.UsbConstants.USB_ENDPOINT_XFER_ISOC -> "ISOCHRONOUS"
+            android.hardware.usb.UsbConstants.USB_ENDPOINT_XFER_BULK -> "BULK"
+            android.hardware.usb.UsbConstants.USB_ENDPOINT_XFER_INT -> "INTERRUPT"
+            else -> "UNKNOWN"
+          }
+          Log.d(TAG, "    Endpoint $j: Address 0x${endpoint.address.toString(16)}, Type $type, Direction $direction")
+        }
+        
+        if (interfaceClass == 1 && interfaceSubclass == 3) {
           hasMidiInterface = true
           Log.d(TAG, "  Interface $i is a standard MIDI interface (Class 1, Subclass 3)")
         }
         // Check for other common MIDI interface patterns
-        else if (usbInterface.interfaceClass == 2 && usbInterface.interfaceSubclass == 6) {
+        else if (interfaceClass == 2 && interfaceSubclass == 6) {
           // Some MIDI devices use Communications class (2) with subclass 6
-          hasMidiInterface = true
+          potentialMidiInterface = true
           Log.d(TAG, "  Interface $i is likely a MIDI interface (Class 2, Subclass 6)")
         }
-        else if (usbInterface.interfaceClass == 255) {
+        else if (interfaceClass == 255) {
           // Vendor-specific class, might be MIDI
+          potentialMidiInterface = true
           Log.d(TAG, "  Interface $i is a vendor-specific interface (Class 255)")
-          // We'll consider it a potential MIDI interface
-          hasMidiInterface = true
-        }
-        else {
-          Log.d(TAG, "  Interface $i: Class ${usbInterface.interfaceClass}, Subclass ${usbInterface.interfaceSubclass}")
         }
       }
       
+      // Check for known MIDI device vendor IDs
+      val knownMidiVendors = listOf(
+        0x041E, // Creative Labs
+        0x0763, // M-Audio
+        0x0D8C, // C-Media (some MIDI adapters)
+        0x1397, // BEHRINGER
+        0x152A, // Thesycon (MIDI driver)
+        0x1A86, // QinHeng (CH345/CH9325 USB-MIDI adapters)
+        0x2982, // Akai
+        0x07CF, // Casio
+        0x0582, // Roland
+        0x0944, // Korg
+        0x1410, // Novation
+        0x17CC, // Native Instruments
+        0x0499  // Yamaha
+      )
+      
       if (hasMidiInterface) {
-        Log.d(TAG, "  This device has a potential MIDI interface")
+        Log.d(TAG, "  This device has a standard MIDI interface")
+        midiDevices.add(device)
+      } else if (potentialMidiInterface) {
+        Log.d(TAG, "  This device has a potential MIDI interface (non-standard)")
+        midiDevices.add(device)
+      } else if (device.vendorId in knownMidiVendors) {
+        Log.d(TAG, "  This device has a known MIDI vendor ID: 0x${device.vendorId.toString(16).uppercase()}")
+        midiDevices.add(device)
       } else {
         Log.d(TAG, "  This device does not appear to have a MIDI interface")
+        
+        // Check if this is a USB hub or adapter
+        if (device.deviceClass == 9) { // Hub class
+          Log.d(TAG, "  This device is a USB hub")
+        } else if (device.vendorId == 0x0BDA) { // Realtek (common in USB-C adapters)
+          Log.d(TAG, "  This device appears to be a Realtek USB adapter/converter, not a MIDI device")
+        } else if (device.deviceClass == 0 && device.deviceSubclass == 0 && device.interfaceCount == 1) {
+          // Many USB adapters have this profile
+          Log.d(TAG, "  This device might be a USB adapter/converter, not a MIDI device")
+        }
+      }
+      
+      Log.d(TAG, "===================")
+    }
+    
+    if (midiDevices.isEmpty()) {
+      Log.d(TAG, "No MIDI devices found among USB devices")
+    } else {
+      Log.d(TAG, "Found ${midiDevices.size} potential MIDI devices among USB devices")
+      midiDevices.forEach { device ->
+        Log.d(TAG, "  Potential MIDI device: ${device.deviceName}, Vendor: 0x${device.vendorId.toString(16).uppercase()}, Product: 0x${device.productId.toString(16).uppercase()}")
       }
     }
     
-    return deviceList.values.toList()
+    return midiDevices
   }
   
   /**
@@ -459,12 +524,14 @@ class MidiDeviceManagerImpl(
       
       // Find a suitable interface to claim
       var usbInterface: android.hardware.usb.UsbInterface? = null
+      var selectedInterfaceIndex = -1
       
       // First, try to find a MIDI interface (class 1, subclass 3)
       for (i in 0 until device.interfaceCount) {
         val intf = device.getInterface(i)
         if (intf.interfaceClass == 1 && intf.interfaceSubclass == 3) {
           usbInterface = intf
+          selectedInterfaceIndex = i
           Log.d(TAG, "Found standard MIDI interface at index $i")
           break
         }
@@ -476,6 +543,7 @@ class MidiDeviceManagerImpl(
           val intf = device.getInterface(i)
           if (intf.interfaceClass == 2 && intf.interfaceSubclass == 6) {
             usbInterface = intf
+            selectedInterfaceIndex = i
             Log.d(TAG, "Found communications interface at index $i that might be MIDI")
             break
           }
@@ -488,7 +556,21 @@ class MidiDeviceManagerImpl(
           val intf = device.getInterface(i)
           if (intf.interfaceClass == 255) {
             usbInterface = intf
+            selectedInterfaceIndex = i
             Log.d(TAG, "Found vendor-specific interface at index $i")
+            break
+          }
+        }
+      }
+      
+      // If still no interface, try audio class (1) with any subclass
+      if (usbInterface == null) {
+        for (i in 0 until device.interfaceCount) {
+          val intf = device.getInterface(i)
+          if (intf.interfaceClass == 1) {
+            usbInterface = intf
+            selectedInterfaceIndex = i
+            Log.d(TAG, "Found audio interface at index $i with subclass ${intf.interfaceSubclass}")
             break
           }
         }
@@ -497,6 +579,7 @@ class MidiDeviceManagerImpl(
       // If still no interface, just use the first one
       if (usbInterface == null && device.interfaceCount > 0) {
         usbInterface = device.getInterface(0)
+        selectedInterfaceIndex = 0
         Log.d(TAG, "Using first available interface as fallback")
       }
       
@@ -506,6 +589,8 @@ class MidiDeviceManagerImpl(
         notifyListeners(ConnectionState.ERROR, "No suitable interface found on device")
         return
       }
+      
+      Log.d(TAG, "Selected interface $selectedInterfaceIndex: Class ${usbInterface.interfaceClass}, Subclass ${usbInterface.interfaceSubclass}")
       
       // Claim the interface
       val claimed = connection.claimInterface(usbInterface, true)
@@ -524,16 +609,45 @@ class MidiDeviceManagerImpl(
       
       // Find an input endpoint (direction IN)
       var inputEndpoint: android.hardware.usb.UsbEndpoint? = null
+      
+      // First try to find an INTERRUPT or BULK IN endpoint
       for (i in 0 until usbInterface.endpointCount) {
         val endpoint = usbInterface.getEndpoint(i)
-        Log.d(TAG, "Endpoint $i: address=0x${endpoint.address.toString(16)}, " +
-                   "attributes=0x${endpoint.attributes.toString(16)}, " +
-                   "direction=${if (endpoint.direction == android.hardware.usb.UsbConstants.USB_DIR_IN) "IN" else "OUT"}")
+        val direction = if (endpoint.direction == android.hardware.usb.UsbConstants.USB_DIR_IN) "IN" else "OUT"
+        val type = when (endpoint.type) {
+          android.hardware.usb.UsbConstants.USB_ENDPOINT_XFER_CONTROL -> "CONTROL"
+          android.hardware.usb.UsbConstants.USB_ENDPOINT_XFER_ISOC -> "ISOCHRONOUS"
+          android.hardware.usb.UsbConstants.USB_ENDPOINT_XFER_BULK -> "BULK"
+          android.hardware.usb.UsbConstants.USB_ENDPOINT_XFER_INT -> "INTERRUPT"
+          else -> "UNKNOWN"
+        }
+        
+        Log.d(TAG, "Endpoint $i: Address 0x${endpoint.address.toString(16)}, Type $type, Direction $direction")
         
         if (endpoint.direction == android.hardware.usb.UsbConstants.USB_DIR_IN) {
-          inputEndpoint = endpoint
-          Log.d(TAG, "Found input endpoint at index $i")
-          break
+          if (endpoint.type == android.hardware.usb.UsbConstants.USB_ENDPOINT_XFER_INT) {
+            // Interrupt endpoints are preferred for MIDI
+            inputEndpoint = endpoint
+            Log.d(TAG, "Found INTERRUPT IN endpoint at index $i")
+            break
+          } else if (endpoint.type == android.hardware.usb.UsbConstants.USB_ENDPOINT_XFER_BULK && inputEndpoint == null) {
+            // Bulk endpoints are also common for MIDI
+            inputEndpoint = endpoint
+            Log.d(TAG, "Found BULK IN endpoint at index $i")
+            // Don't break, continue looking for an INTERRUPT endpoint
+          }
+        }
+      }
+      
+      // If no INTERRUPT or BULK endpoint found, try any IN endpoint
+      if (inputEndpoint == null) {
+        for (i in 0 until usbInterface.endpointCount) {
+          val endpoint = usbInterface.getEndpoint(i)
+          if (endpoint.direction == android.hardware.usb.UsbConstants.USB_DIR_IN) {
+            inputEndpoint = endpoint
+            Log.d(TAG, "Found IN endpoint at index $i (type: ${endpoint.type})")
+            break
+          }
         }
       }
       
@@ -561,7 +675,11 @@ class MidiDeviceManagerImpl(
             val bytesRead = connection.bulkTransfer(inputEndpoint, buffer, buffer.size, 100)
             
             if (bytesRead > 0) {
-              Log.d(TAG, "Read $bytesRead bytes from USB device")
+              // Log the raw bytes for debugging
+              val hexData = buffer.slice(0 until bytesRead).joinToString(" ") { 
+                "0x${it.toInt().and(0xFF).toString(16).padStart(2, '0')}" 
+              }
+              Log.d(TAG, "Read $bytesRead bytes from USB device: $hexData")
               
               // Process the MIDI data
               val timestamp = System.nanoTime()
