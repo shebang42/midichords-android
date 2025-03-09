@@ -66,6 +66,13 @@ class MidiDeviceManagerImpl(
               intent.getParcelableExtra(UsbManager.EXTRA_DEVICE)
             }
             
+            // HARD BLOCK: Check if this is a 0xBDA device
+            if (device != null && isBlockedConverter(device)) {
+              Log.e(TAG, "HARD BLOCK: Received permission result for 0xBDA converter device: ${device.deviceName}")
+              notifyListeners(ConnectionState.ERROR, "Cannot connect to USB converter device (0xBDA). Please connect a MIDI device directly.")
+              return
+            }
+            
             if (intent.getBooleanExtra(UsbManager.EXTRA_PERMISSION_GRANTED, false)) {
               device?.let {
                 Log.d(TAG, "USB permission granted for device: ${it.deviceName}")
@@ -92,6 +99,13 @@ class MidiDeviceManagerImpl(
           } else {
             @Suppress("DEPRECATION")
             intent.getParcelableExtra(UsbManager.EXTRA_DEVICE)
+          }
+          
+          // HARD BLOCK: Check if this is a 0xBDA device
+          if (device != null && isBlockedConverter(device)) {
+            Log.e(TAG, "HARD BLOCK: 0xBDA converter device attached: ${device.deviceName}")
+            notifyListeners(ConnectionState.ERROR, "USB converter device (0xBDA) attached. Please connect a MIDI device directly.")
+            return
           }
           
           device?.let {
@@ -171,6 +185,17 @@ class MidiDeviceManagerImpl(
     listeners.remove(listener)
   }
 
+  /**
+   * Check if a device is a 0xBDA converter that should be blocked
+   */
+  private fun isBlockedConverter(device: UsbDevice): Boolean {
+    val isBlocked = device.vendorId == 0x0BDA
+    if (isBlocked) {
+      Log.e(TAG, "BLOCKED DEVICE: ${device.deviceName} has vendor ID 0xBDA (Realtek converter)")
+    }
+    return isBlocked
+  }
+
   override fun refreshAvailableDevices() {
     try {
       // First, check for USB devices directly
@@ -181,7 +206,8 @@ class MidiDeviceManagerImpl(
       allUsbDevices.forEach { (name, device) ->
         val vendorId = "0x${device.vendorId.toString(16).uppercase()}"
         val productId = "0x${device.productId.toString(16).uppercase()}"
-        Log.d(TAG, "Device: $name, VID: $vendorId, PID: $productId, Class: ${device.deviceClass}, Interfaces: ${device.interfaceCount}")
+        val isBlocked = isBlockedConverter(device)
+        Log.d(TAG, "Device: $name, VID: $vendorId, PID: $productId, Class: ${device.deviceClass}, Interfaces: ${device.interfaceCount}, BLOCKED: $isBlocked")
       }
       Log.d(TAG, "==========================")
       
@@ -199,7 +225,7 @@ class MidiDeviceManagerImpl(
       
       // Check if we have any non-0xBDA devices
       val nonConverterDevices = allUsbDevices.filter { (_, device) -> 
-        device.vendorId != 0x0BDA 
+        !isBlockedConverter(device)
       }
       
       Log.d(TAG, "Found ${allUsbDevices.size} total USB devices, ${nonConverterDevices.size} non-converter devices")
@@ -519,8 +545,8 @@ class MidiDeviceManagerImpl(
   override fun connectToUsbDevice(device: UsbDevice) {
     try {
       // HARD BLOCK: Refuse to connect to 0xBDA devices
-      if (device.vendorId == 0x0BDA) {
-        Log.e(TAG, "Refusing to connect to 0xBDA converter device: ${device.deviceName}")
+      if (isBlockedConverter(device)) {
+        Log.e(TAG, "HARD BLOCK: Refusing to connect to 0xBDA converter device: ${device.deviceName}")
         notifyListeners(ConnectionState.ERROR, "Cannot connect to USB converter device (0xBDA). Please connect a MIDI device directly.")
         return
       }
@@ -620,8 +646,8 @@ class MidiDeviceManagerImpl(
   
   private fun tryDirectConnection(device: UsbDevice) {
     // HARD BLOCK: Refuse to connect to 0xBDA devices
-    if (device.vendorId == 0x0BDA) {
-      Log.e(TAG, "Refusing direct connection to 0xBDA converter device: ${device.deviceName}")
+    if (isBlockedConverter(device)) {
+      Log.e(TAG, "HARD BLOCK: Refusing direct connection to 0xBDA converter device: ${device.deviceName}")
       notifyListeners(ConnectionState.ERROR, "Cannot connect to USB converter device (0xBDA). Please connect a MIDI device directly.")
       return
     }
@@ -840,6 +866,13 @@ class MidiDeviceManagerImpl(
   }
 
   private fun requestUsbPermission(device: UsbDevice) {
+    // HARD BLOCK: Refuse to request permission for 0xBDA devices
+    if (isBlockedConverter(device)) {
+      Log.e(TAG, "HARD BLOCK: Refusing to request permission for 0xBDA converter device: ${device.deviceName}")
+      notifyListeners(ConnectionState.ERROR, "Cannot connect to USB converter device (0xBDA). Please connect a MIDI device directly.")
+      return
+    }
+    
     Log.d(TAG, "Requesting permission for USB device: ${device.deviceName}")
     notifyListeners(ConnectionState.CONNECTING, "Requesting permission for USB device: ${device.deviceName}")
     
