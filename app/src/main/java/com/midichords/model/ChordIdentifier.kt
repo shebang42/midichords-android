@@ -9,6 +9,7 @@ interface ChordIdentifier {
    * @param notes The collection of active notes
    * @return The identified chord, or null if no chord could be identified
    */
+  @JvmName("identifyChordFromNotes")
   fun identifyChord(notes: List<ActiveNote>): Chord?
   
   /**
@@ -16,6 +17,7 @@ interface ChordIdentifier {
    * @param pitchClasses The collection of pitch classes
    * @return The identified chord, or null if no chord could be identified
    */
+  @JvmName("identifyChordFromPitchClasses")
   fun identifyChord(pitchClasses: List<PitchClass>): Chord?
   
   /**
