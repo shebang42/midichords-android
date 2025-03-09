@@ -262,23 +262,32 @@ class MainActivity : AppCompatActivity() {
     // Show a message
     Toast.makeText(this, "Found ${filteredDevices.size} USB devices (excluding 0xBDA converters)", Toast.LENGTH_SHORT).show()
     
-    // If we have devices, show details for the first one
+    // If we have devices, handle connection automatically if only one device, else prompt the user
     if (deviceNames.isNotEmpty()) {
-      val firstDevice = deviceMap[deviceNames[0]]
-      firstDevice?.let {
-        displayDeviceDetails(it)
-        
-        // Add a dialog to ask if the user wants to connect to the device
-        val builder = androidx.appcompat.app.AlertDialog.Builder(this)
-        builder.setTitle("Connect to MIDI Device")
-          .setMessage("Do you want to connect to this device?\n\n${it.deviceName}\nVendor ID: 0x${it.vendorId.toString(16).uppercase()}\nProduct ID: 0x${it.productId.toString(16).uppercase()}")
-          .setPositiveButton("Connect") { _, _ ->
-            viewModel.connectToDevice(it)
-          }
-          .setNegativeButton("Cancel") { dialog, _ ->
-            dialog.dismiss()
-          }
-          .show()
+      if (deviceNames.size == 1) {
+        val device = deviceMap[deviceNames[0]]
+        device?.let {
+          displayDeviceDetails(it)
+          viewModel.connectToDevice(it)
+          Toast.makeText(this, "Automatically connected to ${it.deviceName}", Toast.LENGTH_SHORT).show()
+        }
+      } else {
+        val firstDevice = deviceMap[deviceNames[0]]
+        firstDevice?.let {
+          displayDeviceDetails(it)
+
+          // Add a dialog to ask if the user wants to connect to the device
+          val builder = androidx.appcompat.app.AlertDialog.Builder(this)
+          builder.setTitle("Connect to MIDI Device")
+            .setMessage("Do you want to connect to this device?\n\n${it.deviceName}\nVendor ID: 0x${it.vendorId.toString(16).uppercase()}\nProduct ID: 0x${it.productId.toString(16).uppercase()}")
+            .setPositiveButton("Connect") { _, _ ->
+              viewModel.connectToDevice(it)
+            }
+            .setNegativeButton("Cancel") { dialog, _ ->
+              dialog.dismiss()
+            }
+            .show()
+        }
       }
     }
   }
@@ -415,8 +424,9 @@ class MainActivity : AppCompatActivity() {
 
   override fun onResume() {
     super.onResume()
-    Log.d(TAG, "MainActivity resumed, refreshing devices")
-    viewModel.refreshAvailableDevices()
+    Log.d(TAG, "MainActivity resumed, scanning USB devices")
+    scanForUsbDevices()
+    binding.root.postDelayed({ viewModel.refreshAvailableDevices() }, 500)
   }
 
   private fun toggleDebugMode() {

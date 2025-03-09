@@ -76,3 +76,14 @@ Next Steps:
 1. Implement the highest priority fixes in MidiDeviceManagerImpl
 2. Test with physical MIDI devices after each fix
 3. Progressively improve the implementation following the plan
+
+## Steps to Resolve MIDI Event Connection without Manual Refresh
+
+- [x] Identify that MIDI events only work after a manual refresh.
+- [x] Revert to a commit where MIDI events were working.
+- [x] Implement auto scanning for USB devices in onResume of MainActivity.
+- [x] Modify scanForUsbDevices to automatically connect if only one device is available.
+- [x] Add a delay for refreshAvailableDevices after auto scanning to allow connection to settle.
+- [ ] Test auto-connection to ensure that status shows "Connected" without manual refresh.
+- [ ] Verify that error messages ("Disconnected" / "Error") no longer appear on app start.
+- [ ] Document the changes and update user instructions if necessary.
