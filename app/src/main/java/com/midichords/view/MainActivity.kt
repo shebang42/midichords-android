@@ -277,7 +277,8 @@ class MainActivity : AppCompatActivity() {
     
     if (allDevices.isEmpty()) {
       Toast.makeText(this, "No USB devices found", Toast.LENGTH_SHORT).show()
-      binding.deviceDetails.text = "No USB devices found"
+      // Update debug log instead of deviceDetails
+      addLogEntry("No USB devices found")
       return
     }
     
@@ -307,7 +308,8 @@ class MainActivity : AppCompatActivity() {
         }
       }
       
-      binding.deviceDetails.text = details.toString()
+      // Update debug log instead of deviceDetails
+      addLogEntry(details.toString())
       return
     }
     
@@ -380,7 +382,8 @@ class MainActivity : AppCompatActivity() {
       details.append("  Interfaces: ${device.interfaceCount}\n\n")
     }
     
-    binding.deviceDetails.text = details.toString()
+    // Log to debug instead of deviceDetails
+    addLogEntry(details.toString())
   }
   
   private fun updateDeviceList(devices: List<UsbDevice>) {
@@ -407,7 +410,8 @@ class MainActivity : AppCompatActivity() {
         displayDeviceDetails(it)
       }
     } else {
-      binding.deviceDetails.text = "No devices available"
+      // Log to debug instead of deviceDetails
+      addLogEntry("No devices available")
     }
   }
   
@@ -452,7 +456,8 @@ class MainActivity : AppCompatActivity() {
       details.append("This device does NOT have a standard MIDI interface")
     }
     
-    binding.deviceDetails.text = details.toString()
+    // Log to debug instead of deviceDetails
+    addLogEntry(details.toString())
   }
 
   /**
@@ -552,7 +557,7 @@ class MainActivity : AppCompatActivity() {
         sb.append(entry).append("\n")
       }
     }
-    binding.tvDebugLog.text = sb.toString()
+    binding.debugLogText.text = sb.toString()
   }
   
   private fun clearLog() {
