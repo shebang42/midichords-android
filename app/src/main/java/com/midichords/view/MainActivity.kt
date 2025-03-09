@@ -153,11 +153,23 @@ class MainActivity : AppCompatActivity() {
   private fun scanForUsbDevices() {
     // Get USB devices directly from UsbManager
     val usbManager = getSystemService(USB_SERVICE) as UsbManager
-    val deviceList = usbManager.deviceList
+    val allDevices = usbManager.deviceList
     
-    if (deviceList.isEmpty()) {
+    if (allDevices.isEmpty()) {
       Toast.makeText(this, "No USB devices found", Toast.LENGTH_SHORT).show()
       binding.deviceDetails.text = "No USB devices found"
+      return
+    }
+    
+    // Filter out the 0xBDA converter device
+    val filteredDevices = allDevices.filter { (_, device) -> device.vendorId != 0x0BDA }
+    
+    if (filteredDevices.isEmpty()) {
+      Toast.makeText(this, "Only found USB converter devices. Please connect a MIDI device directly.", Toast.LENGTH_LONG).show()
+      binding.deviceDetails.text = "Only found USB converter devices. Please connect a MIDI device directly."
+      
+      // Still show all devices for debugging purposes
+      displayAllDevices(allDevices)
       return
     }
     
@@ -165,8 +177,8 @@ class MainActivity : AppCompatActivity() {
     deviceMap.clear()
     val deviceNames = mutableListOf<String>()
     
-    // Add all USB devices to the list
-    deviceList.forEach { (name, device) ->
+    // Add filtered USB devices to the list
+    filteredDevices.forEach { (name, device) ->
       // Create a more descriptive name for the device
       val vendorId = "0x${device.vendorId.toString(16).uppercase()}"
       val productId = "0x${device.productId.toString(16).uppercase()}"
@@ -183,7 +195,7 @@ class MainActivity : AppCompatActivity() {
     deviceAdapter.notifyDataSetChanged()
     
     // Show a message
-    Toast.makeText(this, "Found ${deviceList.size} USB devices", Toast.LENGTH_SHORT).show()
+    Toast.makeText(this, "Found ${filteredDevices.size} USB devices (excluding converters)", Toast.LENGTH_SHORT).show()
     
     // If we have devices, show details for the first one
     if (deviceNames.isNotEmpty()) {
@@ -192,6 +204,24 @@ class MainActivity : AppCompatActivity() {
         displayDeviceDetails(it)
       }
     }
+  }
+  
+  private fun displayAllDevices(devices: Map<String, UsbDevice>) {
+    // For debugging - show all devices including converters
+    val details = StringBuilder("All connected USB devices (including converters):\n\n")
+    
+    devices.forEach { (name, device) ->
+      val vendorId = "0x${device.vendorId.toString(16).uppercase()}"
+      val productId = "0x${device.productId.toString(16).uppercase()}"
+      
+      details.append("Device: $name\n")
+      details.append("  Vendor ID: $vendorId\n")
+      details.append("  Product ID: $productId\n")
+      details.append("  Class: ${device.deviceClass}\n")
+      details.append("  Interfaces: ${device.interfaceCount}\n\n")
+    }
+    
+    binding.deviceDetails.text = details.toString()
   }
   
   private fun updateDeviceList(devices: List<UsbDevice>) {
@@ -278,9 +308,10 @@ class MainActivity : AppCompatActivity() {
         "2. Pull down the notification shade\n" +
         "3. Tap on the USB notification\n" +
         "4. Select 'MIDI' from the options\n\n" +
-        "IMPORTANT: If you're using a USB adapter/converter:\n" +
-        "- Connect your MIDI device to the adapter, then connect the adapter to your Android device\n" +
-        "- The app will try to identify your MIDI device, not the adapter\n\n" +
+        "IMPORTANT: About USB adapters/converters:\n" +
+        "- The app will now IGNORE the Realtek USB-C adapter (0xBDA)\n" +
+        "- It will try to connect directly to your MIDI device\n" +
+        "- If you only see the adapter in the device list, your MIDI device may not be properly connected\n\n" +
         "If you can't select 'This device' mode, try:\n" +
         "- Disconnecting and reconnecting your MIDI device\n" +
         "- Using a different USB cable\n" +

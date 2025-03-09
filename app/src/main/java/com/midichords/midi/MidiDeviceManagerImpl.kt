@@ -174,21 +174,29 @@ class MidiDeviceManagerImpl(
   override fun refreshAvailableDevices() {
     try {
       // First, check for USB devices directly
-      val usbDevices = checkForUsbDevices()
-      if (usbDevices.isNotEmpty()) {
-        // Find the first device that's not a converter
-        val midiDevice = usbDevices.firstOrNull { device ->
-          // Check if it's not a known converter
-          val knownConverters = listOf(0x0BDA, 0x05AC, 0x2109, 0x1A40, 0x0424, 0x0451, 0x174C, 0x8087)
-          device.vendorId !in knownConverters
-        } ?: usbDevices.first()
+      val allUsbDevices = usbManager.deviceList.values.toList()
+      
+      // Completely exclude the 0xBDA converter device
+      val filteredDevices = allUsbDevices.filter { device -> 
+        device.vendorId != 0x0BDA 
+      }
+      
+      Log.d(TAG, "Found ${allUsbDevices.size} total USB devices, ${filteredDevices.size} after filtering out converters")
+      
+      if (filteredDevices.isNotEmpty()) {
+        // Select the first non-converter device
+        val selectedDevice = filteredDevices.first()
+        val vendorId = "0x${selectedDevice.vendorId.toString(16).uppercase()}"
+        val productId = "0x${selectedDevice.productId.toString(16).uppercase()}"
         
-        val vendorId = "0x${midiDevice.vendorId.toString(16).uppercase()}"
-        val productId = "0x${midiDevice.productId.toString(16).uppercase()}"
-        
-        Log.d(TAG, "Found ${usbDevices.size} USB devices, connecting to: ${midiDevice.deviceName} (VID:$vendorId, PID:$productId)")
-        notifyListeners(ConnectionState.CONNECTING, "Connecting to device: ${midiDevice.deviceName} (VID:$vendorId, PID:$productId)")
-        requestUsbPermission(midiDevice)
+        Log.d(TAG, "Selected device: ${selectedDevice.deviceName} (VID:$vendorId, PID:$productId)")
+        notifyListeners(ConnectionState.CONNECTING, "Connecting to device: ${selectedDevice.deviceName} (VID:$vendorId, PID:$productId)")
+        requestUsbPermission(selectedDevice)
+        return
+      } else if (allUsbDevices.isNotEmpty()) {
+        // If we only have converter devices, show a message
+        Log.d(TAG, "Only found USB converter devices, no MIDI devices")
+        notifyListeners(ConnectionState.ERROR, "Only found USB converter devices. Please connect a MIDI device directly.")
         return
       }
       
