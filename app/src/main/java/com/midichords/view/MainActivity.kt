@@ -133,13 +133,11 @@ class MainActivity : AppCompatActivity() {
       if (state == ConnectionState.CONNECTED) {
         binding.scanButton.isEnabled = false
         binding.deviceList.isEnabled = false
-        binding.btnConnect.isEnabled = false
-        binding.btnDisconnect.isEnabled = true
+        // binding.btnConnect.isEnabled = false
       } else {
         binding.scanButton.isEnabled = true
         binding.deviceList.isEnabled = true
-        binding.btnConnect.isEnabled = true
-        binding.btnDisconnect.isEnabled = false
+        // binding.btnConnect.isEnabled = true
       }
     }
 
