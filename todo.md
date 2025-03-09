@@ -144,10 +144,10 @@
   - [x] Add LiveData for current chord
   - [x] Add LiveData for connection state
 - [x] Connect MainViewModel to MIDI components
-- [ ] Create main layout XML:
-  - [ ] Add placeholders for staff view
-  - [ ] Add placeholders for chord display
-  - [ ] Add connection status indicator
+- [x] Create main layout XML:
+  - [x] Add placeholders for staff view
+  - [x] Add placeholders for chord display
+  - [x] Add connection status indicator
 - [x] Update MainActivity:
   - [x] Initialize MainViewModel
   - [x] Observe LiveData objects
@@ -159,31 +159,31 @@
   - [ ] Test MIDI event processing
 
 ### Step 3.2: Staff View Fundamentals
-- [ ] Create StaffView class extending View:
-  - [ ] Override onMeasure for size calculation
-  - [ ] Implement onDraw for basic staff
-  - [ ] Initialize Paint objects and resources
-- [ ] Implement staff rendering:
-  - [ ] Draw five-line staff
-  - [ ] Create treble clef rendering
-  - [ ] Create bass clef rendering
-  - [ ] Add staff separator
+- [x] Create StaffView class extending View:
+  - [x] Override onMeasure for size calculation
+  - [x] Implement onDraw for basic staff
+  - [x] Initialize Paint objects and resources
+- [x] Implement staff rendering:
+  - [x] Draw five-line staff
+  - [x] Create treble clef rendering
+  - [x] Create bass clef rendering
+  - [x] Add staff separator
 - [ ] Write tests for StaffView:
   - [ ] Test measurement calculations
   - [ ] Test drawing operations
   - [ ] Test layout behavior
 
 ### Step 3.3: Note Rendering
-- [ ] Create NoteRenderer helper class:
-  - [ ] Implement note position calculation
-  - [ ] Add quarter note head drawing
-  - [ ] Implement stem drawing
-  - [ ] Add ledger line support
-- [ ] Extend StaffView to use NoteRenderer:
-  - [ ] Accept ActiveNote list input
-  - [ ] Render notes at correct positions
-  - [ ] Handle multiple simultaneous notes
-- [ ] Implement accidental rendering (sharp/flat)
+- [x] Create NoteRenderer helper class:
+  - [x] Implement note position calculation
+  - [x] Add quarter note head drawing
+  - [x] Implement stem drawing
+  - [x] Add ledger line support
+- [x] Extend StaffView to use NoteRenderer:
+  - [x] Accept ActiveNote list input
+  - [x] Render notes at correct positions
+  - [x] Handle multiple simultaneous notes
+- [x] Implement accidental rendering (sharp/flat)
 - [ ] Write tests for note rendering:
   - [ ] Test note positioning
   - [ ] Test various note combinations
@@ -191,28 +191,28 @@
   - [ ] Test ledger lines
 
 ### Step 3.4: Chord Display
-- [ ] Create ChordDisplayView custom View:
-  - [ ] Implement layout measurements
-  - [ ] Create text rendering for chord names
-  - [ ] Add styling for different chord types
-- [ ] Connect ChordDisplayView to MainViewModel
-- [ ] Add chord display view to main layout
+- [x] Create ChordDisplayView custom View:
+  - [x] Implement layout measurements
+  - [x] Create text rendering for chord names
+  - [x] Add styling for different chord types
+- [x] Connect ChordDisplayView to MainViewModel
+- [x] Add chord display view to main layout
 - [ ] Write tests for ChordDisplayView:
   - [ ] Test chord name formatting
   - [ ] Test layout measurements
   - [ ] Test update behavior
 
 ### Step 3.5: UI Integration
-- [ ] Finalize layouts:
-  - [ ] Complete portrait layout
-  - [ ] Create landscape layout
-  - [ ] Test on different screen sizes
-- [ ] Implement connection status indicator:
-  - [ ] Add visual indicator for connection states
-  - [ ] Create error state display
-- [ ] Complete MainViewModel integration:
-  - [ ] Connect all components to ViewModel
-  - [ ] Ensure proper state propagation
+- [x] Finalize layouts:
+  - [x] Complete portrait layout
+  - [x] Create landscape layout
+  - [x] Test on different screen sizes
+- [x] Implement connection status indicator:
+  - [x] Add visual indicator for connection states
+  - [x] Create error state display
+- [x] Complete MainViewModel integration:
+  - [x] Connect all components to ViewModel
+  - [x] Ensure proper state propagation
 - [ ] Write integration tests:
   - [ ] Test end-to-end flow
   - [ ] Test UI updates with simulated input
