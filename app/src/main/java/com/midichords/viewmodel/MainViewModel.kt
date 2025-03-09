@@ -15,8 +15,12 @@ import com.midichords.midi.MidiDeviceManager
 import com.midichords.midi.MidiDeviceManagerImpl
 import com.midichords.midi.MidiEvent
 import com.midichords.midi.MidiEventListener
+import com.midichords.model.ActiveNote
+import com.midichords.model.NoteProcessor
+import com.midichords.model.NoteProcessorImpl
+import com.midichords.model.NoteStateListener
 
-class MainViewModel(application: Application) : AndroidViewModel(application), MidiDeviceListener, MidiEventListener {
+class MainViewModel(application: Application) : AndroidViewModel(application), MidiDeviceListener, NoteStateListener {
   companion object {
     private const val TAG = "MainViewModel"
   }
@@ -30,15 +34,20 @@ class MainViewModel(application: Application) : AndroidViewModel(application), M
   private val _availableDevices = MutableLiveData<List<UsbDevice>>()
   val availableDevices: LiveData<List<UsbDevice>> = _availableDevices
 
+  private val _activeNotes = MutableLiveData<List<ActiveNote>>()
+  val activeNotes: LiveData<List<ActiveNote>> = _activeNotes
+
   private val _lastMidiEvent = MutableLiveData<MidiEvent>()
   val lastMidiEvent: LiveData<MidiEvent> = _lastMidiEvent
+
+  private val noteProcessor: NoteProcessor = NoteProcessorImpl()
 
   private val midiDeviceManager = try {
     val midiManager = application.getSystemService(Context.MIDI_SERVICE) as? MidiManager
     val usbManager = application.getSystemService(Context.USB_SERVICE) as UsbManager
     MidiDeviceManagerImpl(application, midiManager, usbManager).also {
       it.registerListener(this)
-      it.addMidiEventListener(this)
+      it.addMidiEventListener(noteProcessor)
     }
   } catch (e: Exception) {
     Log.e(TAG, "Failed to initialize MIDI device manager", e)
@@ -49,6 +58,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application), M
     Log.d(TAG, "Initializing MainViewModel")
     _connectionState.value = ConnectionState.DISCONNECTED
     _connectionMessage.value = "Disconnected"
+    _activeNotes.value = emptyList()
+    noteProcessor.registerNoteListener(this)
     refreshAvailableDevices()
   }
 
@@ -91,15 +102,29 @@ class MainViewModel(application: Application) : AndroidViewModel(application), M
     }
   }
 
-  override fun onMidiEvent(event: MidiEvent) {
-    Log.d(TAG, "MIDI event received: $event")
-    _lastMidiEvent.value = event
+  // NoteStateListener implementation
+  override fun onNoteActivated(note: ActiveNote) {
+    Log.d(TAG, "Note activated: ${note.getNoteName()}")
+  }
+
+  override fun onNoteDeactivated(note: ActiveNote) {
+    Log.d(TAG, "Note deactivated: ${note.getNoteName()}")
+  }
+
+  override fun onActiveNotesChanged(activeNotes: List<ActiveNote>) {
+    Log.d(TAG, "Active notes changed: ${activeNotes.size} notes")
+    _activeNotes.postValue(activeNotes)
+  }
+
+  override fun onSustainPedalStateChanged(isOn: Boolean) {
+    Log.d(TAG, "Sustain pedal state changed: $isOn")
   }
 
   override fun onCleared() {
     super.onCleared()
     midiDeviceManager?.unregisterListener(this)
-    midiDeviceManager?.removeMidiEventListener(this)
+    midiDeviceManager?.removeMidiEventListener(noteProcessor)
+    noteProcessor.unregisterNoteListener(this)
   }
 }
 
