@@ -42,14 +42,29 @@ android {
     unitTests {
       isIncludeAndroidResources = true
       isReturnDefaultValues = true
+      all {
+        it.useJUnitPlatform()
+      }
     }
   }
 }
 
+// Version constants
+object Versions {
+  const val kotlin = "1.9.22"
+  const val coroutines = "1.7.3"
+  const val lifecycle = "2.7.0"
+  const val mockito = "5.10.0"
+  const val mockitoKotlin = "5.2.1"
+  const val robolectric = "4.11.1"
+  const val androidxTest = "1.5.0"
+  const val espresso = "3.5.1"
+}
+
 dependencies {
   // Kotlin
-  implementation("org.jetbrains.kotlin:kotlin-stdlib:1.9.22")
-  implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
+  implementation("org.jetbrains.kotlin:kotlin-stdlib:${Versions.kotlin}")
+  implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:${Versions.coroutines}")
 
   // AndroidX Core
   implementation("androidx.core:core-ktx:1.12.0")
@@ -58,22 +73,22 @@ dependencies {
   implementation("androidx.constraintlayout:constraintlayout:2.1.4")
 
   // Lifecycle
-  implementation("androidx.lifecycle:lifecycle-viewmodel-ktx:2.7.0")
-  implementation("androidx.lifecycle:lifecycle-livedata-ktx:2.7.0")
-  implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.7.0")
+  implementation("androidx.lifecycle:lifecycle-viewmodel-ktx:${Versions.lifecycle}")
+  implementation("androidx.lifecycle:lifecycle-livedata-ktx:${Versions.lifecycle}")
+  implementation("androidx.lifecycle:lifecycle-runtime-ktx:${Versions.lifecycle}")
 
   // Testing
   testImplementation("junit:junit:4.13.2")
-  testImplementation("org.mockito:mockito-core:5.10.0")
-  testImplementation("org.mockito.kotlin:mockito-kotlin:5.2.1")
-  testImplementation("org.robolectric:robolectric:4.11.1")
-  testImplementation("androidx.test:core:1.5.0")
-  testImplementation("androidx.test:runner:1.5.2")
-  testImplementation("androidx.test:rules:1.5.0")
-  testImplementation("androidx.test.ext:junit:1.1.5")
-  testImplementation("androidx.test.espresso:espresso-core:3.5.1")
-  testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.7.3")
+  testImplementation("org.mockito:mockito-core:${Versions.mockito}")
+  testImplementation("org.mockito.kotlin:mockito-kotlin:${Versions.mockitoKotlin}")
+  testImplementation("org.robolectric:robolectric:${Versions.robolectric}")
+  testImplementation("androidx.test:core:${Versions.androidxTest}")
+  testImplementation("androidx.test:runner:${Versions.androidxTest}")
+  testImplementation("androidx.test:rules:${Versions.androidxTest}")
+  testImplementation("androidx.test.ext:junit:${Versions.espresso}")
+  testImplementation("androidx.test.espresso:espresso-core:${Versions.espresso}")
+  testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:${Versions.coroutines}")
   
-  androidTestImplementation("androidx.test.ext:junit:1.1.5")
-  androidTestImplementation("androidx.test.espresso:espresso-core:3.5.1")
+  androidTestImplementation("androidx.test.ext:junit:${Versions.espresso}")
+  androidTestImplementation("androidx.test.espresso:espresso-core:${Versions.espresso}")
 } 
