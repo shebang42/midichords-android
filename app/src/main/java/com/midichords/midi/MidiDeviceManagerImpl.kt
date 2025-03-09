@@ -176,8 +176,19 @@ class MidiDeviceManagerImpl(
       // First, check for USB devices directly
       val usbDevices = checkForUsbDevices()
       if (usbDevices.isNotEmpty()) {
-        Log.d(TAG, "Found ${usbDevices.size} USB devices, requesting permission for the first one")
-        requestUsbPermission(usbDevices.first())
+        // Find the first device that's not a converter
+        val midiDevice = usbDevices.firstOrNull { device ->
+          // Check if it's not a known converter
+          val knownConverters = listOf(0x0BDA, 0x05AC, 0x2109, 0x1A40, 0x0424, 0x0451, 0x174C, 0x8087)
+          device.vendorId !in knownConverters
+        } ?: usbDevices.first()
+        
+        val vendorId = "0x${midiDevice.vendorId.toString(16).uppercase()}"
+        val productId = "0x${midiDevice.productId.toString(16).uppercase()}"
+        
+        Log.d(TAG, "Found ${usbDevices.size} USB devices, connecting to: ${midiDevice.deviceName} (VID:$vendorId, PID:$productId)")
+        notifyListeners(ConnectionState.CONNECTING, "Connecting to device: ${midiDevice.deviceName} (VID:$vendorId, PID:$productId)")
+        requestUsbPermission(midiDevice)
         return
       }
       
@@ -199,6 +210,36 @@ class MidiDeviceManagerImpl(
     Log.d(TAG, "Found ${deviceList.size} USB devices via UsbManager")
     
     val midiDevices = mutableListOf<UsbDevice>()
+    val converterDevices = mutableListOf<UsbDevice>()
+    
+    // Known USB converter/hub vendor IDs to filter out
+    val knownConverterVendors = listOf(
+      0x0BDA, // Realtek (common in USB-C adapters)
+      0x05AC, // Apple
+      0x2109, // VIA Labs (USB hubs)
+      0x1A40, // Terminus Technology (USB hubs)
+      0x0424, // Standard Microsystems Corp (USB hubs)
+      0x0451, // Texas Instruments (USB hubs)
+      0x174C, // ASMedia (USB hubs)
+      0x8087  // Intel (USB hubs)
+    )
+    
+    // Known MIDI device vendor IDs to prioritize
+    val knownMidiVendors = listOf(
+      0x041E, // Creative Labs
+      0x0763, // M-Audio
+      0x0D8C, // C-Media (some MIDI adapters)
+      0x1397, // BEHRINGER
+      0x152A, // Thesycon (MIDI driver)
+      0x1A86, // QinHeng (CH345/CH9325 USB-MIDI adapters)
+      0x2982, // Akai
+      0x07CF, // Casio
+      0x0582, // Roland
+      0x0944, // Korg
+      0x1410, // Novation
+      0x17CC, // Native Instruments
+      0x0499  // Yamaha
+    )
     
     // Log details about each device
     deviceList.forEach { (name, device) ->
@@ -253,59 +294,51 @@ class MidiDeviceManagerImpl(
         }
       }
       
-      // Check for known MIDI device vendor IDs
-      val knownMidiVendors = listOf(
-        0x041E, // Creative Labs
-        0x0763, // M-Audio
-        0x0D8C, // C-Media (some MIDI adapters)
-        0x1397, // BEHRINGER
-        0x152A, // Thesycon (MIDI driver)
-        0x1A86, // QinHeng (CH345/CH9325 USB-MIDI adapters)
-        0x2982, // Akai
-        0x07CF, // Casio
-        0x0582, // Roland
-        0x0944, // Korg
-        0x1410, // Novation
-        0x17CC, // Native Instruments
-        0x0499  // Yamaha
-      )
+      // Determine if this is a converter/hub or a MIDI device
+      val isConverter = device.vendorId in knownConverterVendors || 
+                        (device.deviceClass == 9) || // Hub class
+                        (device.deviceClass == 0 && device.deviceSubclass == 0 && device.interfaceCount == 1 && !hasMidiInterface && !potentialMidiInterface)
       
-      if (hasMidiInterface) {
-        Log.d(TAG, "  This device has a standard MIDI interface")
-        midiDevices.add(device)
-      } else if (potentialMidiInterface) {
-        Log.d(TAG, "  This device has a potential MIDI interface (non-standard)")
-        midiDevices.add(device)
-      } else if (device.vendorId in knownMidiVendors) {
-        Log.d(TAG, "  This device has a known MIDI vendor ID: 0x${device.vendorId.toString(16).uppercase()}")
+      val isMidiDevice = hasMidiInterface || 
+                         potentialMidiInterface || 
+                         device.vendorId in knownMidiVendors
+      
+      if (isConverter) {
+        Log.d(TAG, "  This device appears to be a USB converter/hub, not a MIDI device")
+        converterDevices.add(device)
+      } else if (isMidiDevice) {
+        if (hasMidiInterface) {
+          Log.d(TAG, "  This device has a standard MIDI interface")
+        } else if (potentialMidiInterface) {
+          Log.d(TAG, "  This device has a potential MIDI interface (non-standard)")
+        } else {
+          Log.d(TAG, "  This device has a known MIDI vendor ID: 0x${device.vendorId.toString(16).uppercase()}")
+        }
         midiDevices.add(device)
       } else {
-        Log.d(TAG, "  This device does not appear to have a MIDI interface")
-        
-        // Check if this is a USB hub or adapter
-        if (device.deviceClass == 9) { // Hub class
-          Log.d(TAG, "  This device is a USB hub")
-        } else if (device.vendorId == 0x0BDA) { // Realtek (common in USB-C adapters)
-          Log.d(TAG, "  This device appears to be a Realtek USB adapter/converter, not a MIDI device")
-        } else if (device.deviceClass == 0 && device.deviceSubclass == 0 && device.interfaceCount == 1) {
-          // Many USB adapters have this profile
-          Log.d(TAG, "  This device might be a USB adapter/converter, not a MIDI device")
-        }
+        Log.d(TAG, "  This device does not appear to be a MIDI device or converter")
       }
       
       Log.d(TAG, "===================")
     }
     
-    if (midiDevices.isEmpty()) {
-      Log.d(TAG, "No MIDI devices found among USB devices")
-    } else {
+    // If we found MIDI devices, return those
+    if (midiDevices.isNotEmpty()) {
       Log.d(TAG, "Found ${midiDevices.size} potential MIDI devices among USB devices")
       midiDevices.forEach { device ->
         Log.d(TAG, "  Potential MIDI device: ${device.deviceName}, Vendor: 0x${device.vendorId.toString(16).uppercase()}, Product: 0x${device.productId.toString(16).uppercase()}")
       }
+      return midiDevices
     }
     
-    return midiDevices
+    // If we only found converters, return those as a last resort
+    if (converterDevices.isNotEmpty()) {
+      Log.d(TAG, "Found only USB converters/hubs, returning as last resort")
+      return converterDevices
+    }
+    
+    Log.d(TAG, "No MIDI devices or converters found among USB devices")
+    return emptyList()
   }
   
   /**

@@ -274,14 +274,18 @@ class MainActivity : AppCompatActivity() {
     builder.setTitle("USB Mode Settings")
       .setMessage(
         "To use a USB MIDI device, you need to:\n\n" +
-        "1. Pull down the notification shade\n" +
-        "2. Tap on the USB notification\n" +
-        "3. Select 'MIDI' from the options\n\n" +
+        "1. Make sure your MIDI device is connected directly to your Android device\n" +
+        "2. Pull down the notification shade\n" +
+        "3. Tap on the USB notification\n" +
+        "4. Select 'MIDI' from the options\n\n" +
+        "IMPORTANT: If you're using a USB adapter/converter:\n" +
+        "- Connect your MIDI device to the adapter, then connect the adapter to your Android device\n" +
+        "- The app will try to identify your MIDI device, not the adapter\n\n" +
         "If you can't select 'This device' mode, try:\n" +
         "- Disconnecting and reconnecting your MIDI device\n" +
         "- Using a different USB cable\n" +
         "- Restarting your device\n\n" +
-        "Would you like to open Android USB settings now?"
+        "Would you like to open Android settings now?"
       )
       .setPositiveButton("Open Settings") { _, _ ->
         openUsbSettings()
