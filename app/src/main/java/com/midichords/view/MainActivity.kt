@@ -48,8 +48,8 @@ class MainActivity : AppCompatActivity() {
     setupObservers()
     Log.d(TAG, "MainActivity created")
 
-    // Add debug mode button long press
-    binding.btnRefresh.setOnLongClickListener {
+    // Move debug mode toggle to connection status long press
+    binding.connectionStatus.setOnLongClickListener {
       toggleDebugMode()
       true
     }
