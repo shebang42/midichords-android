@@ -250,9 +250,6 @@ class MainActivity : AppCompatActivity() {
           binding.midiChannelInfo.text = "Channel: ${it.channel + 1}" // Display 1-based channel number
         }
       }
-      
-      // Update StaffView with active notes
-      binding.staffView.setActiveNotes(notes)
     }
     
     // Observe current chord

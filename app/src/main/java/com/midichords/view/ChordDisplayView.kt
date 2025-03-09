@@ -34,17 +34,17 @@ class ChordDisplayView @JvmOverloads constructor(
   }
   
   private val textPaint = Paint().apply {
-    color = Color.parseColor("#333333")
-    textSize = 48f
-    typeface = Typeface.DEFAULT_BOLD
+    color = Color.BLACK
+    textSize = 64f
+    typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
     textAlign = Paint.Align.CENTER
     isAntiAlias = true
   }
   
-  private val subtextPaint = Paint().apply {
-    color = Color.parseColor("#666666")
-    textSize = 24f
-    typeface = Typeface.DEFAULT
+  private val detailPaint = Paint().apply {
+    color = Color.DKGRAY
+    textSize = 48f // Doubled from 24f
+    typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
     textAlign = Paint.Align.CENTER
     isAntiAlias = true
   }
@@ -54,7 +54,7 @@ class ChordDisplayView @JvmOverloads constructor(
   
   // Current chord to display
   private var currentChord: Chord? = null
-  private var noChordMessage = "No Chord Detected"
+  private var noChordMessage = "No Chord"
 
   override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
     super.onSizeChanged(w, h, oldw, oldh)
@@ -77,31 +77,27 @@ class ChordDisplayView @JvmOverloads constructor(
     
     if (currentChord != null) {
       // Draw the chord name
-      textPaint.textSize = 64f
+      textPaint.textSize = 128f
       canvas.drawText(currentChord!!.getName(), centerX, centerY, textPaint)
       
       // Draw additional info like full name and inversion
-      val detailsY = centerY + 40f
+      val detailsY = centerY + 80f
       
       // Create detail text combining full name and inversion if applicable
-      val inversionText = when (currentChord!!.inversion) {
-        0 -> ""
-        1 -> "(1st inversion)"
-        2 -> "(2nd inversion)"
-        3 -> "(3rd inversion)"
-        else -> "(${currentChord!!.inversion}th inversion)"
+      val fullName = currentChord!!.getFullName()
+      val inversion = when(currentChord!!.getInversion()) {
+        0 -> "Root Position"
+        1 -> "First Inversion"
+        2 -> "Second Inversion"
+        3 -> "Third Inversion"
+        else -> "Inversion ${currentChord!!.getInversion()}"
       }
       
-      val detailText = if (inversionText.isNotEmpty()) {
-        "${currentChord!!.getFullName()} $inversionText"
-      } else {
-        currentChord!!.getFullName()
-      }
-      
-      canvas.drawText(detailText, centerX, detailsY, subtextPaint)
+      val detailText = "$fullName - $inversion"
+      canvas.drawText(detailText, centerX, detailsY, detailPaint)
     } else {
       // Draw the "No Chord" message
-      textPaint.textSize = 48f
+      textPaint.textSize = 128f
       canvas.drawText(noChordMessage, centerX, centerY, textPaint)
     }
   }
