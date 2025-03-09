@@ -1,10 +1,13 @@
 package com.midichords.view
 
+import android.Manifest
 import android.content.Intent
 import android.hardware.usb.UsbDevice
 import android.hardware.usb.UsbManager
+import android.os.Build
 import android.os.Bundle
 import android.util.Log
+import android.view.View
 import android.widget.ArrayAdapter
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
@@ -13,12 +16,20 @@ import com.midichords.databinding.ActivityMainBinding
 import com.midichords.midi.ConnectionState
 import com.midichords.midi.MidiEventType
 import com.midichords.viewmodel.MainViewModel
+import java.text.SimpleDateFormat
+import java.util.*
+import java.util.concurrent.LinkedList
 
 class MainActivity : AppCompatActivity() {
   private lateinit var binding: ActivityMainBinding
   private lateinit var viewModel: MainViewModel
   private lateinit var deviceAdapter: ArrayAdapter<String>
   private val deviceMap = mutableMapOf<String, UsbDevice>()
+
+  // Debug variables
+  private var debugMode = false
+  private val maxLogEntries = 100
+  private val logEntries = LinkedList<String>()
 
   companion object {
     private const val TAG = "MainActivity"
@@ -33,6 +44,17 @@ class MainActivity : AppCompatActivity() {
     setupUI()
     setupObservers()
     Log.d(TAG, "MainActivity created")
+
+    // Add debug mode button long press
+    binding.btnRefresh.setOnLongClickListener {
+      toggleDebugMode()
+      true
+    }
+
+    // Request permission to use MIDI devices
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+      requestPermissions(arrayOf(Manifest.permission.READ_EXTERNAL_STORAGE), PERMISSION_REQUEST_CODE)
+    }
   }
 
   private fun setupUI() {
@@ -379,5 +401,63 @@ class MainActivity : AppCompatActivity() {
     super.onResume()
     Log.d(TAG, "MainActivity resumed, refreshing devices")
     viewModel.refreshAvailableDevices()
+  }
+
+  private fun toggleDebugMode() {
+    debugMode = !debugMode
+    
+    if (debugMode) {
+      // Show debug UI
+      binding.debugContainer.visibility = View.VISIBLE
+      Toast.makeText(this, "Debug mode enabled", Toast.LENGTH_SHORT).show()
+      
+      // Add debug MIDI event listener
+      viewModel.addMidiEventListener(object : MidiEventListener {
+        override fun onMidiEvent(event: MidiEvent) {
+          // Log the event to our debug display
+          addLogEntry("MIDI: ${event.type} ch:${event.channel} d1:${event.data1} d2:${event.data2}")
+        }
+      })
+    } else {
+      // Hide debug UI
+      binding.debugContainer.visibility = View.GONE
+      Toast.makeText(this, "Debug mode disabled", Toast.LENGTH_SHORT).show()
+    }
+  }
+  
+  private fun addLogEntry(entry: String) {
+    // Add timestamp
+    val timestamp = SimpleDateFormat("HH:mm:ss.SSS", Locale.US).format(Date())
+    val timestampedEntry = "$timestamp - $entry"
+    
+    // Add to our collection with a max size limit
+    synchronized(logEntries) {
+      logEntries.addFirst(timestampedEntry)
+      while (logEntries.size > maxLogEntries) {
+        logEntries.removeLast()
+      }
+    }
+    
+    // Update the UI on the main thread
+    runOnUiThread {
+      updateLogDisplay()
+    }
+  }
+  
+  private fun updateLogDisplay() {
+    val sb = StringBuilder()
+    synchronized(logEntries) {
+      for (entry in logEntries) {
+        sb.append(entry).append("\n")
+      }
+    }
+    binding.tvDebugLog.text = sb.toString()
+  }
+  
+  private fun clearLog() {
+    synchronized(logEntries) {
+      logEntries.clear()
+    }
+    updateLogDisplay()
   }
 } 
