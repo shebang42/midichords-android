@@ -9,53 +9,75 @@ import java.util.concurrent.CopyOnWriteArrayList
  */
 class MidiInputProcessorImpl : MidiInputProcessor {
   companion object {
-    private const val TAG = "MidiInputProcessor"
+    private const val TAG = "MidiInputProcessorImpl"
   }
 
   private val listeners = CopyOnWriteArrayList<MidiEventListener>()
-  
+  private var lastStatusByte: Byte? = null
+
   private val midiReceiver = object : MidiReceiver() {
     override fun onSend(data: ByteArray, offset: Int, count: Int, timestamp: Long) {
-      processMidiData(data, offset, count, timestamp)?.let { event ->
-        notifyListeners(event)
-      }
+      val event = processMidiData(data, offset, count, timestamp)
+      event?.let { notifyListeners(it) }
     }
   }
 
   override fun processMidiData(data: ByteArray, offset: Int, length: Int, timestamp: Long): MidiEvent? {
+    if (length < 1) return null
+
     try {
-      if (length < 1) return null
-      
-      val statusByte = data[offset].toInt() and 0xFF
-      
-      // Handle running status (when status byte is omitted)
-      if (statusByte < 0x80) {
-        Log.w(TAG, "Running status not supported")
-        return null
+      var currentOffset = offset
+      val statusByte = data[currentOffset]
+
+      // If this is a data byte and we have a running status, use the last status byte
+      val actualStatusByte = if (statusByte < 0x80.toByte()) {
+        lastStatusByte ?: return null // No running status available
+      } else {
+        currentOffset++ // Move past status byte
+        statusByte.also { lastStatusByte = it }
       }
 
-      // Get number of data bytes based on status
-      val numDataBytes = when (statusByte and 0xF0) {
-        0xC0, 0xD0 -> 1  // Program Change and Channel Pressure
-        0xF0 -> when (statusByte) {
-          0xF1, 0xF3 -> 1  // Time Code Quarter Frame, Song Select
-          0xF2 -> 2  // Song Position Pointer
-          else -> 0  // Other System messages
+      // Get the remaining length after processing the status byte
+      val remainingLength = length - (currentOffset - offset)
+      if (remainingLength < 1) return null
+
+      val command = (actualStatusByte.toInt() and 0xF0)
+      val channel = (actualStatusByte.toInt() and 0x0F)
+
+      return when (command) {
+        0x80 -> { // Note Off
+          if (remainingLength < 2) return null
+          MidiEvent(
+            type = MidiEventType.NOTE_OFF,
+            channel = channel,
+            data1 = data[currentOffset].toInt() and 0xFF,
+            data2 = data[currentOffset + 1].toInt() and 0xFF,
+            timestamp = timestamp
+          )
         }
-        else -> 2  // All other messages (Note On/Off, Control Change, etc.)
+        0x90 -> { // Note On
+          if (remainingLength < 2) return null
+          val velocity = data[currentOffset + 1].toInt() and 0xFF
+          MidiEvent(
+            type = MidiEventType.NOTE_ON,
+            channel = channel,
+            data1 = data[currentOffset].toInt() and 0xFF,
+            data2 = velocity,
+            timestamp = timestamp
+          )
+        }
+        0xB0 -> { // Control Change
+          if (remainingLength < 2) return null
+          MidiEvent(
+            type = MidiEventType.CONTROL_CHANGE,
+            channel = channel,
+            data1 = data[currentOffset].toInt() and 0xFF,
+            data2 = data[currentOffset + 1].toInt() and 0xFF,
+            timestamp = timestamp
+          )
+        }
+        else -> null // Unsupported command
       }
-
-      // Check if we have enough data
-      if (length < numDataBytes + 1) {
-        Log.w(TAG, "Incomplete MIDI message")
-        return null
-      }
-
-      // Extract data bytes
-      val data1 = if (numDataBytes > 0) data[offset + 1].toInt() and 0xFF else 0
-      val data2 = if (numDataBytes > 1) data[offset + 2].toInt() and 0xFF else 0
-
-      return MidiEvent.fromBytes(statusByte, data1, data2)
     } catch (e: Exception) {
       Log.e(TAG, "Error processing MIDI data", e)
       return null
@@ -65,7 +87,7 @@ class MidiInputProcessorImpl : MidiInputProcessor {
   override fun getReceiver(): MidiReceiver = midiReceiver
 
   override fun registerListener(listener: MidiEventListener) {
-    listeners.addIfAbsent(listener)
+    listeners.add(listener)
   }
 
   override fun unregisterListener(listener: MidiEventListener) {
