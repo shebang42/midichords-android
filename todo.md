@@ -108,10 +108,10 @@
   - [x] Add pattern matching for minor triads
   - [x] Implement root note detection
 - [x] Connect ChordIdentifier to NoteProcessor
-- [ ] Write tests for basic chord identification:
-  - [ ] Test major chord recognition
-  - [ ] Test minor chord recognition
-  - [ ] Test with different voicings and inversions
+- [x] Write tests for basic chord identification:
+  - [x] Test major chord recognition
+  - [x] Test minor chord recognition
+  - [x] Test with different voicings and inversions
 
 ### Step 2.4: Advanced Chord Identification
 - [x] Extend ChordIdentifier for advanced chords:
@@ -121,11 +121,20 @@
   - [x] Add suspended chord detection (sus2, sus4)
 - [x] Enhance inversion detection
 - [x] Implement chord name formatting
-- [ ] Write tests for advanced chord identification:
-  - [ ] Test each chord type recognition
-  - [ ] Test complex voicings
-  - [ ] Test inversions
-  - [ ] Test chord name formatting
+- [x] Write tests for advanced chord identification:
+  - [x] Test each chord type recognition
+  - [x] Test complex voicings
+  - [x] Test inversions
+  - [x] Test chord name formatting
+- [x] Write tests for Chord class:
+  - [x] Test chord name formatting
+  - [x] Test flat vs sharp notation
+  - [x] Test chord factory methods
+  - [x] Test chord inversions
+- [x] Write tests for ChordType class:
+  - [x] Test interval handling
+  - [x] Test finding chords by intervals
+  - [x] Test chord symbols and names
 
 ## Phase 3: UI Implementation
 

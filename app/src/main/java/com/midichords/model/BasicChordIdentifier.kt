@@ -7,7 +7,7 @@ import java.util.concurrent.CopyOnWriteArrayList
  * Basic implementation of the ChordIdentifier interface that identifies
  * common chords from a collection of notes.
  */
-class BasicChordIdentifier : ChordIdentifier, NoteStateListener {
+open class BasicChordIdentifier : ChordIdentifier, NoteStateListener {
   companion object {
     private const val TAG = "BasicChordIdentifier"
     private const val MIN_NOTES_FOR_CHORD = 3
@@ -15,7 +15,7 @@ class BasicChordIdentifier : ChordIdentifier, NoteStateListener {
 
   private val listeners = CopyOnWriteArrayList<ChordListener>()
   private var lastIdentifiedChord: Chord? = null
-  private var currentNotes = listOf<ActiveNote>()
+  protected var currentNotes = listOf<ActiveNote>()
 
   override fun onNoteActivated(note: ActiveNote) {
     // Not used directly, we rely on onActiveNotesChanged

@@ -87,3 +87,33 @@ Next Steps:
 - [ ] Test auto-connection to ensure that status shows "Connected" without manual refresh.
 - [ ] Verify that error messages ("Disconnected" / "Error") no longer appear on app start.
 - [ ] Document the changes and update user instructions if necessary.
+
+## Chord Detection Implementation
+
+### Implemented Components
+- [x] Create ChordType enum with intervals for various chord types
+- [x] Implement Chord data class with root, type, inversion, and naming methods
+- [x] Create ChordIdentifier interface and ChordListener for notifications
+- [x] Implement BasicChordIdentifier for standard chord detection
+- [x] Implement AdvancedChordIdentifier with partial matching for complex chords
+
+### Tests for Chord Identification
+- [x] Write BasicChordIdentifierTest with tests for common chord types
+  - [x] Test major and minor triads
+  - [x] Test chord inversions
+  - [x] Test 7th chords (dominant, major, minor)
+  - [x] Test augmented and diminished chords
+  - [x] Test suspended chords
+- [x] Write AdvancedChordIdentifierTest with tests for complex scenarios
+  - [x] Test partial chord detection (missing notes)
+  - [x] Test extended chords (9th, 11th, 13th)
+  - [x] Test altered chords (flat 5, sharp 5, etc.)
+  - [x] Test unusual voicings
+
+### Next Steps for Chord Detection
+- [ ] Run tests to verify both basic and advanced chord detection
+- [ ] Integrate ChordIdentifier with the MainViewModel
+- [ ] Connect ChordIdentifier to the UI for chord name display
+- [ ] Add visualization of detected chords on the staff view
+- [ ] Implement support for alternative chord names (flat vs. sharp notation)
+- [ ] Add user settings for chord detection sensitivity

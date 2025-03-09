@@ -60,6 +60,7 @@ object Versions {
   const val androidxTest = "1.5.0"
   const val espresso = "3.5.1"
   const val androidxJUnit = "1.1.5"
+  const val junitJupiter = "5.10.1"
 }
 
 dependencies {
@@ -80,6 +81,12 @@ dependencies {
 
   // Testing
   testImplementation("junit:junit:4.13.2")
+  // JUnit 5 (Jupiter)
+  testImplementation("org.junit.jupiter:junit-jupiter-api:${Versions.junitJupiter}")
+  testImplementation("org.junit.jupiter:junit-jupiter-params:${Versions.junitJupiter}")
+  testRuntimeOnly("org.junit.jupiter:junit-jupiter-engine:${Versions.junitJupiter}")
+  testRuntimeOnly("org.junit.vintage:junit-vintage-engine:${Versions.junitJupiter}") // For JUnit 4 backward compatibility
+  
   testImplementation("org.mockito:mockito-core:${Versions.mockito}")
   testImplementation("org.mockito.kotlin:mockito-kotlin:${Versions.mockitoKotlin}")
   testImplementation("org.robolectric:robolectric:${Versions.robolectric}")
