@@ -592,8 +592,7 @@ class MidiDeviceManagerImpl(
     try {
       Log.d(TAG, "Trying direct USB connection for device: ${device.deviceName}")
       
-      // Check if this is a MIDI device by examining interfaces
-      var hasMidiInterface = false
+      // Find MIDI interface - only use interfaces that are specifically MIDI (class 1, subclass 3)
       var midiInterfaceIndex = -1
       
       for (i in 0 until device.interfaceCount) {
@@ -602,21 +601,35 @@ class MidiDeviceManagerImpl(
         
         // Audio class (1) with MIDI subclass (3) indicates a MIDI device
         if (usbInterface.interfaceClass == 1 && usbInterface.interfaceSubclass == 3) {
-          hasMidiInterface = true
           midiInterfaceIndex = i
           Log.d(TAG, "Found MIDI interface at index $i")
+          break
         }
       }
       
-      if (!hasMidiInterface) {
-        Log.d(TAG, "Device does not have standard MIDI interfaces, will try first interface")
-        midiInterfaceIndex = 0
+      if (midiInterfaceIndex == -1) {
+        Log.d(TAG, "No MIDI interface found for device: ${device.deviceName}")
+        
+        // If no MIDI interface found, as a LAST resort, try vendor-specific interfaces
+        for (i in 0 until device.interfaceCount) {
+          val usbInterface = device.getInterface(i)
+          if (usbInterface.interfaceClass == 255) { // Vendor-specific
+            midiInterfaceIndex = i
+            Log.d(TAG, "Found vendor-specific interface at index $i, trying as fallback")
+            break
+          }
+        }
+        
+        if (midiInterfaceIndex == -1) {
+          Log.d(TAG, "No suitable interface found, cannot connect directly")
+          return false
+        }
       }
       
       // Get a connection to the device
       val connection = usbManager.openDevice(device)
       if (connection == null) {
-        Log.e(TAG, "Failed to open USB connection")
+        Log.e(TAG, "Failed to open USB connection - null connection returned")
         return false
       }
       
@@ -625,10 +638,10 @@ class MidiDeviceManagerImpl(
       // Get the interface
       val usbInterface = device.getInterface(midiInterfaceIndex)
       
-      // Claim the interface
+      // Claim the interface - required for exclusive access
       val claimed = connection.claimInterface(usbInterface, true)
       if (!claimed) {
-        Log.e(TAG, "Failed to claim interface")
+        Log.e(TAG, "Failed to claim interface - connection.claimInterface returned false")
         connection.close()
         return false
       }
@@ -638,30 +651,38 @@ class MidiDeviceManagerImpl(
       // Find an input endpoint (direction IN)
       var inputEndpoint: android.hardware.usb.UsbEndpoint? = null
       
+      // First look for INTERRUPT IN endpoints (preferred for MIDI)
       for (i in 0 until usbInterface.endpointCount) {
         val endpoint = usbInterface.getEndpoint(i)
-        val direction = if (endpoint.direction == android.hardware.usb.UsbConstants.USB_DIR_IN) "IN" else "OUT"
-        val type = when (endpoint.type) {
-          android.hardware.usb.UsbConstants.USB_ENDPOINT_XFER_CONTROL -> "CONTROL"
-          android.hardware.usb.UsbConstants.USB_ENDPOINT_XFER_ISOC -> "ISOCHRONOUS"
-          android.hardware.usb.UsbConstants.USB_ENDPOINT_XFER_BULK -> "BULK"
-          android.hardware.usb.UsbConstants.USB_ENDPOINT_XFER_INT -> "INTERRUPT"
-          else -> "UNKNOWN"
+        if (endpoint.direction == android.hardware.usb.UsbConstants.USB_DIR_IN && 
+            endpoint.type == android.hardware.usb.UsbConstants.USB_ENDPOINT_XFER_INT) {
+          inputEndpoint = endpoint
+          Log.d(TAG, "Found INTERRUPT IN endpoint at index $i")
+          break
         }
-        
-        Log.d(TAG, "Endpoint $i: Address 0x${endpoint.address.toString(16)}, Type $type, Direction $direction")
-        
-        if (endpoint.direction == android.hardware.usb.UsbConstants.USB_DIR_IN) {
-          if (endpoint.type == android.hardware.usb.UsbConstants.USB_ENDPOINT_XFER_INT) {
-            // Interrupt endpoints are preferred for MIDI
-            inputEndpoint = endpoint
-            Log.d(TAG, "Found INTERRUPT IN endpoint at index $i")
-            break
-          } else if (endpoint.type == android.hardware.usb.UsbConstants.USB_ENDPOINT_XFER_BULK && inputEndpoint == null) {
-            // Bulk endpoints are also common for MIDI
+      }
+      
+      // If no INTERRUPT endpoints, look for BULK IN endpoints
+      if (inputEndpoint == null) {
+        for (i in 0 until usbInterface.endpointCount) {
+          val endpoint = usbInterface.getEndpoint(i)
+          if (endpoint.direction == android.hardware.usb.UsbConstants.USB_DIR_IN && 
+              endpoint.type == android.hardware.usb.UsbConstants.USB_ENDPOINT_XFER_BULK) {
             inputEndpoint = endpoint
             Log.d(TAG, "Found BULK IN endpoint at index $i")
-            // Don't break, continue looking for an INTERRUPT endpoint
+            break
+          }
+        }
+      }
+      
+      // As a last resort, try any IN endpoint
+      if (inputEndpoint == null) {
+        for (i in 0 until usbInterface.endpointCount) {
+          val endpoint = usbInterface.getEndpoint(i)
+          if (endpoint.direction == android.hardware.usb.UsbConstants.USB_DIR_IN) {
+            inputEndpoint = endpoint
+            Log.d(TAG, "Found generic IN endpoint at index $i, type: ${endpoint.type}")
+            break
           }
         }
       }
@@ -678,6 +699,9 @@ class MidiDeviceManagerImpl(
       directUsbInterface = usbInterface
       
       // Start a thread to read from the device
+      // Use AtomicBoolean to safely control thread execution
+      val running = java.util.concurrent.atomic.AtomicBoolean(true)
+      
       val thread = Thread {
         try {
           val buffer = ByteArray(64) // Buffer for reading data
@@ -685,36 +709,54 @@ class MidiDeviceManagerImpl(
           Log.d(TAG, "Starting USB read loop")
           notifyListeners(ConnectionState.CONNECTED, "Connected to ${device.deviceName} via direct USB")
           
-          while (!Thread.interrupted()) {
-            // Read from the endpoint
-            val bytesRead = connection.bulkTransfer(inputEndpoint, buffer, buffer.size, 100)
-            
-            if (bytesRead > 0) {
-              // Log the raw bytes for debugging
-              val hexData = buffer.slice(0 until bytesRead).joinToString(" ") { 
-                "0x${it.toInt().and(0xFF).toString(16).padStart(2, '0')}" 
-              }
-              Log.d(TAG, "Read $bytesRead bytes from USB device: $hexData")
+          while (running.get() && !Thread.interrupted()) {
+            try {
+              // Read from the endpoint with timeout
+              val bytesRead = connection.bulkTransfer(inputEndpoint, buffer, buffer.size, 100)
               
-              // Process the MIDI data
-              val timestamp = System.nanoTime()
-              midiInputProcessor.processMidiData(buffer, 0, bytesRead, timestamp)
+              if (bytesRead > 0) {
+                // Log the raw bytes for debugging (limit to first 16 bytes to avoid flooding log)
+                val logLimit = Math.min(bytesRead, 16)
+                val hexData = buffer.slice(0 until logLimit).joinToString(" ") { 
+                  "0x${it.toInt().and(0xFF).toString(16).padStart(2, '0')}" 
+                }
+                Log.d(TAG, "Read $bytesRead bytes from USB device: $hexData${if (bytesRead > 16) "..." else ""}")
+                
+                // Process the MIDI data
+                val timestamp = System.nanoTime()
+                try {
+                  midiInputProcessor.processMidiData(buffer, 0, bytesRead, timestamp)
+                } catch (e: Exception) {
+                  Log.e(TAG, "Error processing MIDI data", e)
+                }
+              } else if (bytesRead < 0) {
+                // Error occurred
+                Log.e(TAG, "Error reading from USB device: bulkTransfer returned $bytesRead")
+                
+                // Only break if we get consistent errors
+                // Some devices may return errors occasionally but still work
+                Thread.sleep(100)
+              }
+            } catch (e: Exception) {
+              if (e is InterruptedException) {
+                throw e  // Re-throw to be caught by outer catch
+              }
+              Log.e(TAG, "Error in USB read loop", e)
+              Thread.sleep(100)  // Add delay before retry
             }
-            
-            // Small delay to avoid hammering the CPU
-            Thread.sleep(5)
           }
+        } catch (e: InterruptedException) {
+          // Thread was interrupted, this is expected during cleanup
+          Log.d(TAG, "USB read thread interrupted")
         } catch (e: Exception) {
-          if (e is InterruptedException) {
-            // Thread was interrupted, this is expected during cleanup
-            Log.d(TAG, "USB read thread interrupted")
-          } else {
-            Log.e(TAG, "Error reading from USB device", e)
-            notifyListeners(ConnectionState.ERROR, "Error reading from USB device: ${e.message}")
-          }
+          Log.e(TAG, "Fatal error in USB read thread", e)
+          notifyListeners(ConnectionState.ERROR, "Error reading from USB device: ${e.message}")
+        } finally {
+          Log.d(TAG, "USB read thread exiting")
         }
       }
       
+      thread.name = "USB-MIDI-Reader-${device.deviceName}"
       directConnectionThread = thread
       thread.start()
       
@@ -852,29 +894,69 @@ class MidiDeviceManagerImpl(
 
   override fun disconnect() {
     try {
+      Log.d(TAG, "Disconnecting USB/MIDI device")
+      
+      // First, stop the reading thread
+      if (directConnectionThread != null && directConnectionThread!!.isAlive) {
+        Log.d(TAG, "Interrupting USB reading thread")
+        directConnectionThread?.interrupt()
+        
+        // Give the thread some time to clean up
+        try {
+          directConnectionThread?.join(500) // Wait up to 500ms for thread to exit
+        } catch (e: InterruptedException) {
+          Log.w(TAG, "Interrupted while waiting for USB thread to exit")
+        }
+      }
+      directConnectionThread = null
+      
       // Clean up MIDI connection
-      currentInputPort?.close()
-      currentInputPort = null
-      currentDevice?.close()
-      currentDevice = null
+      try {
+        if (currentInputPort != null) {
+          Log.d(TAG, "Closing MIDI input port")
+          currentInputPort?.close()
+          currentInputPort = null
+        }
+      } catch (e: Exception) {
+        Log.e(TAG, "Error closing MIDI input port", e)
+      }
+      
+      try {
+        if (currentDevice != null) {
+          Log.d(TAG, "Closing MIDI device")
+          currentDevice?.close()
+          currentDevice = null
+        }
+      } catch (e: Exception) {
+        Log.e(TAG, "Error closing MIDI device", e)
+      }
+      
       currentDeviceInfo = null
       
       // Clean up direct USB connection
-      directConnectionThread?.interrupt()
-      directConnectionThread = null
-      
-      if (directUsbInterface != null && directUsbConnection != null) {
-        try {
+      try {
+        if (directUsbInterface != null && directUsbConnection != null) {
+          Log.d(TAG, "Releasing USB interface")
           directUsbConnection?.releaseInterface(directUsbInterface)
-          directUsbConnection?.close()
-        } catch (e: Exception) {
-          Log.e(TAG, "Error releasing USB interface", e)
         }
+      } catch (e: Exception) {
+        Log.e(TAG, "Error releasing USB interface", e)
       }
+      
+      try {
+        if (directUsbConnection != null) {
+          Log.d(TAG, "Closing USB connection")
+          directUsbConnection?.close()
+        }
+      } catch (e: Exception) {
+        Log.e(TAG, "Error closing USB connection", e)
+      }
+      
       directUsbInterface = null
       directUsbConnection = null
       
       notifyListeners(ConnectionState.DISCONNECTED, "Disconnected")
+      
       // Start retrying to find new devices
       startRetrying()
     } catch (e: Exception) {
@@ -897,12 +979,28 @@ class MidiDeviceManagerImpl(
   
   // Call this method when the app is being destroyed to clean up resources
   override fun cleanup() {
+    Log.d(TAG, "Cleaning up MIDI device manager resources")
     stopRetrying()
     disconnect()
+    
     try {
-      context.unregisterReceiver(usbReceiver)
+      // Unregister USB receiver
+      try {
+        context.unregisterReceiver(usbReceiver)
+        Log.d(TAG, "Unregistered USB receiver")
+      } catch (e: Exception) {
+        Log.e(TAG, "Error unregistering USB receiver", e)
+      }
+      
+      // Clear all listeners
+      listeners.clear()
+      
+      // Clear any cached data in the MIDI processor
+      midiInputProcessor.cleanup()
+      
+      Log.d(TAG, "Cleanup completed")
     } catch (e: Exception) {
-      Log.e(TAG, "Error unregistering receiver", e)
+      Log.e(TAG, "Error during cleanup", e)
     }
   }
 }

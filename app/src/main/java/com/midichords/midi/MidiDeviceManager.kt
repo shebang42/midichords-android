@@ -3,11 +3,11 @@ package com.midichords.midi
 import android.hardware.usb.UsbDevice
 
 /**
- * Interface for managing MIDI device connections.
+ * Interface for managing MIDI device connections and event dispatching.
  */
 interface MidiDeviceManager {
   /**
-   * Register a listener for connection state changes.
+   * Register a listener to be notified of connection state changes.
    * @param listener The listener to register
    */
   fun registerListener(listener: MidiDeviceListener)
@@ -19,36 +19,39 @@ interface MidiDeviceManager {
   fun unregisterListener(listener: MidiDeviceListener)
 
   /**
-   * Refresh the list of available MIDI devices and attempt to connect to one if available.
+   * Refresh the list of available MIDI devices.
+   * This will scan for USB devices and MIDI devices.
    */
   fun refreshAvailableDevices()
 
   /**
    * Connect to a specific USB device.
+   * This will request permission if needed and attempt to establish a connection.
    * @param device The USB device to connect to
    */
   fun connectToUsbDevice(device: UsbDevice)
 
   /**
-   * Disconnect from the currently connected MIDI device.
+   * Disconnect from the currently connected device.
+   * This will release all resources associated with the connection.
    */
   fun disconnect()
 
   /**
-   * Add a listener for MIDI events.
+   * Add a listener to be notified of MIDI events.
    * @param listener The listener to add
    */
   fun addMidiEventListener(listener: MidiEventListener)
 
   /**
-   * Remove a previously added MIDI event listener.
+   * Remove a previously registered MIDI event listener.
    * @param listener The listener to remove
    */
   fun removeMidiEventListener(listener: MidiEventListener)
   
   /**
-   * Clean up resources when the manager is no longer needed.
-   * This should be called when the app is being destroyed.
+   * Clean up all resources associated with this manager.
+   * This should be called when the application is being destroyed.
    */
   fun cleanup()
 }

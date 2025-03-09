@@ -1,36 +1,40 @@
 package com.midichords.midi
 
+import android.media.midi.MidiInputPort
 import android.media.midi.MidiReceiver
 
 /**
- * Interface for processing MIDI input data and managing MIDI event listeners.
+ * Interface for processing MIDI input data
  */
 interface MidiInputProcessor {
   /**
-   * Process raw MIDI data and convert it to a MidiEvent.
-   * @param data The raw MIDI data bytes
-   * @param offset The offset in the data array where the MIDI message starts
-   * @param length The length of the MIDI message in bytes
-   * @param timestamp The timestamp of the MIDI message in nanoseconds
-   * @return A MidiEvent if the data was successfully processed, null otherwise
-   */
-  fun processMidiData(data: ByteArray, offset: Int, length: Int, timestamp: Long): MidiEvent?
-
-  /**
-   * Get the MidiReceiver that can be connected to a MIDI input port.
-   * @return The MidiReceiver instance
+   * Get the MidiReceiver that can be connected to a MIDI input source
    */
   fun getReceiver(): MidiReceiver
-
+  
   /**
-   * Register a listener for MIDI events.
-   * @param listener The listener to register
+   * Set the MIDI input port for this processor
+   */
+  fun setInputPort(inputPort: MidiInputPort)
+  
+  /**
+   * Process raw MIDI data from a USB device
+   * @return The last MIDI event processed, or null if no events were processed
+   */
+  fun processMidiData(data: ByteArray, offset: Int, count: Int, timestamp: Long): MidiEvent?
+  
+  /**
+   * Register a listener to be notified of MIDI events
    */
   fun registerListener(listener: MidiEventListener)
-
+  
   /**
-   * Unregister a previously registered listener.
-   * @param listener The listener to unregister
+   * Unregister a previously registered listener
    */
   fun unregisterListener(listener: MidiEventListener)
+  
+  /**
+   * Clean up resources when the processor is no longer needed
+   */
+  fun cleanup()
 } 

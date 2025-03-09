@@ -39,67 +39,121 @@ class MidiInputProcessorImpl : MidiInputProcessor {
   /**
    * Process raw MIDI data from a USB device
    * USB MIDI data format is typically 4 bytes per message:
-   * Byte 0: Header (0x0n where n is the cable number)
+   * Byte 0: Header (CIN and Cable Number)
    * Byte 1-3: MIDI message
    */
   override fun processMidiData(data: ByteArray, offset: Int, count: Int, timestamp: Long): MidiEvent? {
     try {
+      if (count <= 0) {
+        return null
+      }
+      
       Log.d(TAG, "Processing ${count} bytes of MIDI data")
       
-      // Log the raw data for debugging
-      val hexData = data.slice(offset until offset + count).joinToString(" ") { 
+      // Log the raw data for debugging (limit to first 16 bytes to avoid flooding logs)
+      val logLimit = Math.min(count, 16)
+      val hexData = data.slice(offset until offset + logLimit).joinToString(" ") { 
         "0x${it.toInt().and(0xFF).toString(16).padStart(2, '0')}" 
       }
-      Log.d(TAG, "Raw MIDI data: $hexData")
+      Log.d(TAG, "Raw MIDI data${if (count > 16) " (first 16 bytes)" else ""}: $hexData")
       
       var latestEvent: MidiEvent? = null
       
-      // Process USB MIDI packets (4 bytes each)
-      var i = offset
-      while (i < offset + count) {
-        // Check if we have at least 4 bytes (USB MIDI packet)
-        if (i + 3 < offset + count) {
-          // USB MIDI packet format:
-          // Byte 0: Header (0x0n where n is the cable number)
-          // Byte 1-3: MIDI message
+      // First, try to process as USB-MIDI packet format (4 bytes per message)
+      // This is the most common format for USB MIDI devices
+      if (count >= 4 && (count % 4 == 0)) {
+        var i = offset
+        var foundValidPacket = false
+        
+        while (i < offset + count) {
+          // Make sure we have enough bytes for a complete packet
+          if (i + 3 >= offset + count) break
           
           val header = data[i].toInt() and 0xFF
           val status = data[i + 1].toInt() and 0xFF
           val data1 = data[i + 2].toInt() and 0xFF
           val data2 = data[i + 3].toInt() and 0xFF
           
-          Log.d(TAG, "USB MIDI packet: Header=0x${header.toString(16)}, Status=0x${status.toString(16)}, Data1=0x${data1.toString(16)}, Data2=0x${data2.toString(16)}")
-          
-          // Extract the MIDI message
-          val event = processMidiMessage(status, data1, data2, timestamp)
-          if (event != null) {
-            latestEvent = event
-            // Dispatch the event to listeners
-            notifyListeners(event)
+          // USB-MIDI header: 0x0n where n is the Code Index Number (CIN)
+          // Only process if this looks like a valid USB-MIDI packet
+          if ((header and 0xF0) == 0x00) {
+            val cin = header and 0x0F
+            // Check if this is a valid CIN for a MIDI message
+            if (cin >= 0x08 && cin <= 0x0E) {
+              foundValidPacket = true
+              Log.d(TAG, "USB-MIDI packet: CIN=$cin, Status=0x${status.toString(16)}, Data1=0x${data1.toString(16)}, Data2=0x${data2.toString(16)}")
+              
+              // Process the message
+              val event = processMidiMessage(status, data1, data2, timestamp)
+              if (event != null) {
+                latestEvent = event
+                notifyListeners(event)
+              }
+            }
           }
           
-          i += 4 // Move to the next USB MIDI packet
-        } else {
-          // Not enough bytes for a complete USB MIDI packet
-          Log.d(TAG, "Incomplete USB MIDI packet, skipping ${offset + count - i} bytes")
-          break
+          // Move to the next packet
+          i += 4
+        }
+        
+        // If we found at least one valid USB-MIDI packet, return the result
+        if (foundValidPacket) {
+          return latestEvent
         }
       }
       
-      // Also try to process as regular MIDI data (not USB MIDI)
-      if (latestEvent == null && count >= 2) {
-        // Try to interpret as standard MIDI message
+      // If we couldn't process as USB-MIDI packets, try standard MIDI format
+      // This is less common for USB devices but some might use it
+      
+      // Method 1: Try to process as single complete MIDI message
+      if (count >= 2) {
         val status = data[offset].toInt() and 0xFF
-        val data1 = if (offset + 1 < offset + count) data[offset + 1].toInt() and 0xFF else 0
-        val data2 = if (offset + 2 < offset + count) data[offset + 2].toInt() and 0xFF else 0
         
-        Log.d(TAG, "Trying standard MIDI message: Status=0x${status.toString(16)}, Data1=0x${data1.toString(16)}, Data2=0x${data2.toString(16)}")
-        
-        val event = processMidiMessage(status, data1, data2, timestamp)
-        if (event != null) {
-          latestEvent = event
-          // Dispatch the event to listeners
-          notifyListeners(event)
+        // Check if this starts with a status byte
+        if (status >= 0x80) {
+          val msgLength = getMidiMessageLength(status)
+          
+          if (offset + msgLength <= offset + count) {
+            val data1 = if (msgLength > 1) data[offset + 1].toInt() and 0xFF else 0
+            val data2 = if (msgLength > 2) data[offset + 2].toInt() and 0xFF else 0
+            
+            Log.d(TAG, "Standard MIDI message: Status=0x${status.toString(16)}, Data1=0x${data1.toString(16)}, Data2=0x${data2.toString(16)}")
+            
+            val event = processMidiMessage(status, data1, data2, timestamp)
+            if (event != null) {
+              latestEvent = event
+              notifyListeners(event)
+              return latestEvent
+            }
+          }
+        }
+      }
+      
+      // Method 2: Try to find a status byte and process from there
+      for (i in offset until offset + count) {
+        val b = data[i].toInt() and 0xFF
+        if (b >= 0x80) { // Found a status byte
+          val remaining = offset + count - i
+          if (remaining >= 2) { // Need at least 2 bytes for a MIDI message
+            val msgLength = getMidiMessageLength(b)
+            if (i + msgLength <= offset + count) {
+              val status = b
+              val data1 = if (msgLength > 1) data[i + 1].toInt() and 0xFF else 0
+              val data2 = if (msgLength > 2) data[i + 2].toInt() and 0xFF else 0
+              
+              Log.d(TAG, "Found embedded MIDI message: Status=0x${status.toString(16)}, Data1=0x${data1.toString(16)}, Data2=0x${data2.toString(16)}")
+              
+              val event = processMidiMessage(status, data1, data2, timestamp)
+              if (event != null) {
+                latestEvent = event
+                notifyListeners(event)
+                // Continue looking for more messages
+              }
+              
+              // Skip ahead by the length of this message
+              i += msgLength - 1 // -1 because the loop will increment i
+            }
+          }
         }
       }
       
@@ -107,6 +161,34 @@ class MidiInputProcessorImpl : MidiInputProcessor {
     } catch (e: Exception) {
       Log.e(TAG, "Error processing MIDI data", e)
       return null
+    }
+  }
+  
+  /**
+   * Get the length of a MIDI message based on its status byte
+   */
+  private fun getMidiMessageLength(status: Int): Int {
+    // Check if this is a status byte
+    if (status < 0x80) {
+      return 0 // Not a status byte
+    }
+    
+    // Get the upper nibble (command)
+    val command = status and 0xF0
+    
+    return when (command) {
+      0x80, 0x90, 0xA0, 0xB0, 0xE0 -> 3 // Note Off, Note On, Poly Pressure, Control Change, Pitch Bend
+      0xC0, 0xD0 -> 2 // Program Change, Channel Pressure
+      0xF0 -> {
+        // System messages
+        when (status) {
+          0xF1, 0xF3 -> 2 // MIDI Time Code, Song Select
+          0xF2 -> 3 // Song Position Pointer
+          0xF6, 0xF7, 0xF8, 0xFA, 0xFB, 0xFC, 0xFE, 0xFF -> 1 // Various system real-time messages
+          else -> 1 // Default for unknown system messages
+        }
+      }
+      else -> 1 // Default fallback
     }
   }
 
@@ -206,5 +288,27 @@ class MidiInputProcessorImpl : MidiInputProcessor {
         Log.e(TAG, "Error notifying listener: $listener", e)
       }
     }
+  }
+  
+  /**
+   * Clean up any resources when the processor is no longer needed
+   */
+  fun cleanup() {
+    Log.d(TAG, "Cleaning up MIDI input processor")
+    // Close the input port if it's still open
+    try {
+      currentInputPort?.close()
+      currentInputPort = null
+    } catch (e: Exception) {
+      Log.e(TAG, "Error closing MIDI input port during cleanup", e)
+    }
+    
+    // Clear all listeners
+    listeners.clear()
+    
+    // Clear any other state
+    lastStatusByte = null
+    
+    Log.d(TAG, "MIDI input processor cleanup completed")
   }
 } 
