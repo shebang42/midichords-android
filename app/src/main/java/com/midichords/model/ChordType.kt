@@ -52,7 +52,35 @@ enum class ChordType(
   SEVENTH_FLAT_5_FLAT_9("Seventh Flat 5 Flat 9", "7b5b9", listOf(0, 4, 6, 10, 13)),
   SEVENTH_SHARP_5_FLAT_9("Seventh Sharp 5 Flat 9", "7#5b9", listOf(0, 4, 8, 10, 13)),
   SEVENTH_FLAT_5_SHARP_9("Seventh Flat 5 Sharp 9", "7b5#9", listOf(0, 4, 6, 10, 15)),
-  SEVENTH_SHARP_5_SHARP_9("Seventh Sharp 5 Sharp 9", "7#5#9", listOf(0, 4, 8, 10, 15));
+  SEVENTH_SHARP_5_SHARP_9("Seventh Sharp 5 Sharp 9", "7#5#9", listOf(0, 4, 8, 10, 15)),
+
+  // Jazz & more esoteric chords
+  DOMINANT_7_SHARP_11("Dominant 7 Sharp 11", "7#11", listOf(0, 4, 7, 10, 18)),
+  DOMINANT_7_FLAT_13("Dominant 7 Flat 13", "7b13", listOf(0, 4, 7, 10, 20)),
+  MAJOR_7_SHARP_11("Major 7 Sharp 11", "maj7#11", listOf(0, 4, 7, 11, 18)),
+  MINOR_MAJOR_9("Minor Major 9", "mMaj9", listOf(0, 3, 7, 11, 14)),
+  ALTERED("Altered Dominant", "7alt", listOf(0, 4, 8, 10, 13, 15)),
+  LYDIAN_DOMINANT("Lydian Dominant", "7#11", listOf(0, 4, 7, 10, 14, 18, 21)),
+  PHRYGIAN("Phrygian", "phryg", listOf(0, 3, 7, 10, 13, 17)),
+  SUSPENDED_4_7("Suspended 4th 7th", "sus4(7)", listOf(0, 5, 7, 10)),
+  SUSPENDED_2_7("Suspended 2nd 7th", "sus2(7)", listOf(0, 2, 7, 10)),
+  MINOR_11_FLAT_5("Minor 11 Flat 5", "m11b5", listOf(0, 3, 6, 10, 14, 17)),
+  
+  // Quartal & Pentatonic derived
+  QUARTAL("Quartal", "quart", listOf(0, 5, 10, 15)),
+  PENTATONIC_MAJOR("Pentatonic Major", "pent", listOf(0, 4, 7, 11, 14)),
+  SO_WHAT("So What", "so", listOf(0, 5, 10, 15, 19)),
+  
+  // Complex jazz voicings
+  DOMINANT_9_SHARP_11("Dominant 9 Sharp 11", "9#11", listOf(0, 4, 7, 10, 14, 18)),
+  MINOR_9_11_13("Minor 9-11-13", "m9-11-13", listOf(0, 3, 7, 10, 14, 17, 21)),
+  DOMINANT_13_FLAT_9("Dominant 13 Flat 9", "13b9", listOf(0, 4, 7, 10, 13, 17, 21)),
+  DOMINANT_13_SHARP_9("Dominant 13 Sharp 9", "13#9", listOf(0, 4, 7, 10, 15, 17, 21)),
+  DOMINANT_13_FLAT_9_SHARP_11("Dominant 13 Flat 9 Sharp 11", "13b9#11", listOf(0, 4, 7, 10, 13, 18, 21)),
+  
+  // Polychords
+  TRIAD_SLASH_SEVENTH("Triad over Seventh", "maj/7", listOf(0, 4, 7, 10, 14, 17, 21)),
+  MINOR_TRIAD_SLASH_SEVENTH("Minor Triad over Seventh", "m/7", listOf(0, 3, 7, 10, 14, 17, 21));
 
   companion object {
     /**

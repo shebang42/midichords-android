@@ -132,4 +132,83 @@ class ChordTypeTest {
     assertEquals("Seventh Flat 5", ChordType.SEVENTH_FLAT_5.fullName)
     assertEquals("Seventh Sharp 5 Flat 9", ChordType.SEVENTH_SHARP_5_FLAT_9.fullName)
   }
+  
+  @Test
+  fun `test jazz chord intervals`() {
+    // Test altered dominant intervals
+    val alteredDomChord = ChordType.ALTERED.intervals
+    assertEquals(listOf(0, 4, 8, 10, 13, 15), alteredDomChord)
+    
+    // Test Lydian dominant intervals
+    val lydianDomChord = ChordType.LYDIAN_DOMINANT.intervals 
+    assertEquals(listOf(0, 4, 7, 10, 14, 18, 21), lydianDomChord)
+    
+    // Test suspended dominant intervals
+    val sus4Dom7Chord = ChordType.SUSPENDED_4_7.intervals
+    assertEquals(listOf(0, 5, 7, 10), sus4Dom7Chord)
+    
+    // Test quartal chord intervals
+    val quartalChord = ChordType.QUARTAL.intervals
+    assertEquals(listOf(0, 5, 10, 15), quartalChord)
+    
+    // Test So What chord intervals (modal jazz voicing from Kind of Blue)
+    val soWhatChord = ChordType.SO_WHAT.intervals
+    assertEquals(listOf(0, 5, 10, 15, 19), soWhatChord)
+  }
+  
+  @Test
+  fun `test jazz chord symbol representations`() {
+    // Test altered dominant symbol
+    assertEquals("7alt", ChordType.ALTERED.symbol)
+    
+    // Test Lydian dominant symbol
+    assertEquals("7#11", ChordType.LYDIAN_DOMINANT.symbol)
+    
+    // Test complex altered dominant symbols
+    assertEquals("13b9", ChordType.DOMINANT_13_FLAT_9.symbol)
+    assertEquals("13#9", ChordType.DOMINANT_13_SHARP_9.symbol)
+    assertEquals("13b9#11", ChordType.DOMINANT_13_FLAT_9_SHARP_11.symbol)
+    
+    // Test polychord symbols
+    assertEquals("maj/7", ChordType.TRIAD_SLASH_SEVENTH.symbol)
+    assertEquals("m/7", ChordType.MINOR_TRIAD_SLASH_SEVENTH.symbol)
+  }
+  
+  @Test
+  fun `test jazz chord identification with findByIntervals`() {
+    // Find altered dominant by intervals
+    val alteredChord = ChordType.findByIntervals(listOf(0, 4, 8, 10, 13, 15))
+    assertEquals(ChordType.ALTERED, alteredChord)
+    
+    // Find Lydian dominant by intervals (G7#11: G-B-D-F-A-C#)
+    val lydianDomChord = ChordType.findByIntervals(listOf(0, 4, 7, 10, 14, 18, 21))
+    assertEquals(ChordType.LYDIAN_DOMINANT, lydianDomChord)
+    
+    // Find sus4(7) chord by intervals 
+    val sus4Dom7 = ChordType.findByIntervals(listOf(0, 5, 7, 10))
+    assertEquals(ChordType.SUSPENDED_4_7, sus4Dom7)
+    
+    // Find quartal chord by intervals
+    val quartal = ChordType.findByIntervals(listOf(0, 5, 10, 15))
+    assertEquals(ChordType.QUARTAL, quartal)
+    
+    // Find complex altered dominant chord by intervals
+    val dom13b9 = ChordType.findByIntervals(listOf(0, 4, 7, 10, 13, 17, 21))
+    assertEquals(ChordType.DOMINANT_13_FLAT_9, dom13b9)
+  }
+  
+  @Test
+  fun `test jazz chord inversions and alternative voicings`() {
+    // Test quartal chord in different voicing
+    val quartalAlt = ChordType.findByIntervals(listOf(5, 10, 15, 20))
+    assertEquals(ChordType.QUARTAL, quartalAlt)
+    
+    // Test 1st inversion of sus4(7) chord
+    val sus4Dom7Inv = ChordType.findByIntervals(listOf(5, 7, 10, 12))
+    assertEquals(ChordType.SUSPENDED_4_7, sus4Dom7Inv)
+    
+    // Test minor with extensions chord - using intervals that correspond with a known chord type
+    val minorExt = ChordType.findByIntervals(listOf(3, 7, 10, 14, 17))
+    assertEquals(ChordType.MINOR_11TH, minorExt)
+  }
 } 
