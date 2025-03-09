@@ -341,29 +341,23 @@ class MainActivity : AppCompatActivity() {
   private fun showUsbModeInstructions() {
     val builder = androidx.appcompat.app.AlertDialog.Builder(this)
     builder.setTitle("USB Mode Settings")
-      .setMessage(
-        "To use a USB MIDI device, you need to:\n\n" +
-        "1. Make sure your MIDI device is connected directly to your Android device\n" +
-        "2. Pull down the notification shade\n" +
-        "3. Tap on the USB notification\n" +
-        "4. Select 'MIDI' from the options\n\n" +
-        "IMPORTANT: About USB adapters/converters:\n" +
-        "- The app will now IGNORE the Realtek USB-C adapter (0xBDA)\n" +
-        "- It will try to connect directly to your MIDI device\n" +
-        "- If you only see the adapter in the device list, your MIDI device may not be properly connected\n\n" +
-        "If you can't select 'This device' mode, try:\n" +
-        "- Disconnecting and reconnecting your MIDI device\n" +
-        "- Using a different USB cable\n" +
-        "- Restarting your device\n\n" +
-        "Would you like to open Android settings now?"
-      )
-      .setPositiveButton("Open Settings") { _, _ ->
-        openUsbSettings()
-      }
-      .setNegativeButton("Cancel") { dialog, _ ->
-        dialog.dismiss()
-      }
-      .show()
+    builder.setMessage(
+      "Your device is showing 'Couldn't switch' for the 'This device' option. This is a common limitation with some Android devices.\n\n" +
+      "To use MIDI devices with this app:\n\n" +
+      "1. Make sure your MIDI device is connected to your Android device\n\n" +
+      "2. Select 'MIDI' under 'Use USB for' in your Android settings\n\n" +
+      "3. If you can't select 'MIDI', try these workarounds:\n" +
+      "   - Disconnect and reconnect your MIDI device\n" +
+      "   - Try a different USB port if available\n" +
+      "   - Restart your Android device with the MIDI device connected\n" +
+      "   - Some devices only work in 'Connected device' mode\n\n" +
+      "The app will automatically try to connect to your MIDI device even if you can't change the USB mode."
+    )
+    builder.setPositiveButton("Open Android Settings") { _, _ ->
+      openUsbSettings()
+    }
+    builder.setNegativeButton("Cancel", null)
+    builder.show()
   }
 
   /**

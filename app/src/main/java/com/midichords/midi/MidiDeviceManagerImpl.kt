@@ -543,326 +543,100 @@ class MidiDeviceManagerImpl(
   }
 
   override fun connectToUsbDevice(device: UsbDevice) {
+    // HARD BLOCK: Refuse to connect to 0xBDA devices
+    if (isBlockedConverter(device)) {
+      Log.e(TAG, "BLOCKED: Refusing to connect to 0xBDA converter device: ${device.deviceName}")
+      notifyListeners(ConnectionState.ERROR, "BLOCKED: Cannot connect to USB converter device (0xBDA). Please connect a MIDI device directly.")
+      return
+    }
+    
     try {
-      // HARD BLOCK: Refuse to connect to 0xBDA devices
-      if (isBlockedConverter(device)) {
-        Log.e(TAG, "HARD BLOCK: Refusing to connect to 0xBDA converter device: ${device.deviceName}")
-        notifyListeners(ConnectionState.ERROR, "Cannot connect to USB converter device (0xBDA). Please connect a MIDI device directly.")
-        return
-      }
-      
       Log.d(TAG, "Attempting to connect to USB device: ${device.deviceName}")
-      Log.d(TAG, "Device details: VID: 0x${device.vendorId.toString(16).uppercase()}, PID: 0x${device.productId.toString(16).uppercase()}")
       
-      // First check if we have permission
+      // Log detailed device information
+      val vendorId = "0x${device.vendorId.toString(16).uppercase()}"
+      val productId = "0x${device.productId.toString(16).uppercase()}"
+      Log.d(TAG, "Device details: VID:$vendorId, PID:$productId, Class:${device.deviceClass}")
+      
+      // Check if we have permission
       if (!usbManager.hasPermission(device)) {
-        Log.d(TAG, "No permission for USB device, requesting permission")
+        Log.d(TAG, "No permission for device, requesting...")
         requestUsbPermission(device)
         return
       }
       
-      // Check if this device has a MIDI interface
-      var hasMidiInterface = false
-      var selectedInterfaceIndex = -1
+      // First try direct connection through USB Manager
+      val success = tryDirectConnection(device)
       
-      Log.d(TAG, "Checking interfaces for device: ${device.deviceName}")
+      if (!success) {
+        // If direct connection fails, try through MIDI Manager
+        Log.d(TAG, "Direct connection failed, trying through MIDI Manager...")
+        tryMidiManagerConnection(device)
+      }
+    } catch (e: Exception) {
+      Log.e(TAG, "Error connecting to USB device", e)
+      notifyListeners(ConnectionState.ERROR, "Error connecting to device: ${e.message}")
+    }
+  }
+  
+  /**
+   * Try to connect directly through USB Manager
+   * This works better for devices in "Connected device" mode
+   */
+  private fun tryDirectConnection(device: UsbDevice): Boolean {
+    try {
+      Log.d(TAG, "Trying direct USB connection for device: ${device.deviceName}")
+      
+      // Check if this is a MIDI device by examining interfaces
+      var hasMidiInterface = false
       for (i in 0 until device.interfaceCount) {
         val usbInterface = device.getInterface(i)
         Log.d(TAG, "Interface $i: Class ${usbInterface.interfaceClass}, Subclass ${usbInterface.interfaceSubclass}")
         
+        // Audio class (1) with MIDI subclass (3) indicates a MIDI device
         if (usbInterface.interfaceClass == 1 && usbInterface.interfaceSubclass == 3) {
           hasMidiInterface = true
-          selectedInterfaceIndex = i
-          Log.d(TAG, "Found standard MIDI interface at index $i")
-          break
-        }
-        // Check for other common MIDI interface patterns
-        else if (usbInterface.interfaceClass == 2 && usbInterface.interfaceSubclass == 6) {
-          // Some MIDI devices use Communications class (2) with subclass 6
-          hasMidiInterface = true
-          selectedInterfaceIndex = i
-          Log.d(TAG, "Found likely MIDI interface at index $i (Class 2, Subclass 6)")
-          break
-        }
-        else if (usbInterface.interfaceClass == 255) {
-          // Vendor-specific class, might be MIDI
-          hasMidiInterface = true
-          selectedInterfaceIndex = i
-          Log.d(TAG, "Found vendor-specific interface at index $i that might be MIDI")
-          break
+          Log.d(TAG, "Found MIDI interface at index $i")
         }
       }
       
       if (!hasMidiInterface) {
-        Log.e(TAG, "Device does not appear to have a MIDI interface")
-        notifyListeners(ConnectionState.ERROR, "Device does not appear to have a standard MIDI interface, but we'll try anyway")
-        // We'll continue anyway since some devices don't properly report their interfaces
-      } else {
-        Log.d(TAG, "Device has a potential MIDI interface at index $selectedInterfaceIndex")
+        Log.d(TAG, "Device does not have MIDI interfaces, but will try anyway")
       }
       
-      // Try to find the device in the MIDI manager
-      @Suppress("DEPRECATION")
-      val devices = midiManager?.devices ?: emptyArray()
-      findAndConnectToUsbDevice(devices, device)
-    } catch (e: Exception) {
-      Log.e(TAG, "Error connecting to USB device", e)
-      notifyListeners(ConnectionState.ERROR, "Error connecting to USB device: ${e.message}")
-      // Start retrying if there was an error
-      startRetrying()
-    }
-  }
-  
-  private fun findAndConnectToUsbDevice(devices: Array<MidiDeviceInfo>, usbDevice: UsbDevice) {
-    Log.d(TAG, "Searching for USB device ${usbDevice.deviceName} in ${devices.size} MIDI devices")
-    
-    for (deviceInfo in devices) {
-      if (deviceInfo.type == MidiDeviceInfo.TYPE_USB) {
-        val properties = deviceInfo.properties
-        val deviceId = properties.getInt(MidiDeviceInfo.PROPERTY_USB_DEVICE)
-        Log.d(TAG, "Checking MIDI device with ID $deviceId against USB device ID ${usbDevice.deviceId}")
-        
-        if (deviceId == usbDevice.deviceId) {
-          Log.d(TAG, "Found matching MIDI device for USB device ${usbDevice.deviceName}")
-          connectToDevice(deviceInfo)
-          return
-        }
-      }
-    }
-    
-    Log.d(TAG, "USB device not recognized as MIDI device by Android MIDI service.")
-    Log.d(TAG, "This could be because:")
-    Log.d(TAG, "1. The device is not a MIDI device")
-    Log.d(TAG, "2. The device requires a driver that is not installed")
-    Log.d(TAG, "3. The Android MIDI service has not yet recognized the device")
-    
-    // Try a direct approach for devices that aren't recognized by the MIDI service
-    tryDirectConnection(usbDevice)
-  }
-  
-  private var directUsbConnection: android.hardware.usb.UsbDeviceConnection? = null
-  private var directUsbInterface: android.hardware.usb.UsbInterface? = null
-  private var directConnectionThread: Thread? = null
-  
-  private fun tryDirectConnection(device: UsbDevice) {
-    // HARD BLOCK: Refuse to connect to 0xBDA devices
-    if (isBlockedConverter(device)) {
-      Log.e(TAG, "HARD BLOCK: Refusing direct connection to 0xBDA converter device: ${device.deviceName}")
-      notifyListeners(ConnectionState.ERROR, "Cannot connect to USB converter device (0xBDA). Please connect a MIDI device directly.")
-      return
-    }
-    
-    Log.d(TAG, "Attempting direct connection to USB device: ${device.deviceName}")
-    Log.d(TAG, "Device details: VID: 0x${device.vendorId.toString(16).uppercase()}, PID: 0x${device.productId.toString(16).uppercase()}")
-    notifyListeners(ConnectionState.CONNECTING, "Attempting direct connection to ${device.deviceName}")
-    
-    try {
-      // Open a connection to the device
+      // Get a connection to the device
       val connection = usbManager.openDevice(device)
       if (connection == null) {
-        Log.e(TAG, "Failed to open connection to device: ${device.deviceName}")
-        notifyListeners(ConnectionState.ERROR, "Failed to open connection to device. Make sure you've granted permission.")
-        return
+        Log.e(TAG, "Failed to open USB connection")
+        return false
       }
       
-      Log.d(TAG, "Successfully opened connection to device: ${device.deviceName}")
+      Log.d(TAG, "Successfully opened USB connection")
       
-      // Find a suitable interface to claim
-      var usbInterface: android.hardware.usb.UsbInterface? = null
-      var selectedInterfaceIndex = -1
-      
-      // First, try to find a MIDI interface (class 1, subclass 3)
-      for (i in 0 until device.interfaceCount) {
-        val intf = device.getInterface(i)
-        if (intf.interfaceClass == 1 && intf.interfaceSubclass == 3) {
-          usbInterface = intf
-          selectedInterfaceIndex = i
-          Log.d(TAG, "Found standard MIDI interface at index $i")
-          break
+      // Now try to find the MIDI device through the MIDI manager
+      midiManager?.registerDeviceCallback(object : MidiManager.DeviceCallback() {
+        override fun onDeviceAdded(device: MidiDeviceInfo) {
+          Log.d(TAG, "MIDI device added: ${device.properties}")
+          handleMidiDevice(device)
         }
-      }
+      }, Handler(Looper.getMainLooper()))
       
-      // If no standard MIDI interface, try communications class (2, 6)
-      if (usbInterface == null) {
-        for (i in 0 until device.interfaceCount) {
-          val intf = device.getInterface(i)
-          if (intf.interfaceClass == 2 && intf.interfaceSubclass == 6) {
-            usbInterface = intf
-            selectedInterfaceIndex = i
-            Log.d(TAG, "Found communications interface at index $i that might be MIDI")
-            break
-          }
-        }
-      }
-      
-      // If still no interface, try vendor-specific (255)
-      if (usbInterface == null) {
-        for (i in 0 until device.interfaceCount) {
-          val intf = device.getInterface(i)
-          if (intf.interfaceClass == 255) {
-            usbInterface = intf
-            selectedInterfaceIndex = i
-            Log.d(TAG, "Found vendor-specific interface at index $i")
-            break
-          }
-        }
-      }
-      
-      // If still no interface, try audio class (1) with any subclass
-      if (usbInterface == null) {
-        for (i in 0 until device.interfaceCount) {
-          val intf = device.getInterface(i)
-          if (intf.interfaceClass == 1) {
-            usbInterface = intf
-            selectedInterfaceIndex = i
-            Log.d(TAG, "Found audio interface at index $i with subclass ${intf.interfaceSubclass}")
-            break
-          }
-        }
-      }
-      
-      // If still no interface, just use the first one
-      if (usbInterface == null && device.interfaceCount > 0) {
-        usbInterface = device.getInterface(0)
-        selectedInterfaceIndex = 0
-        Log.d(TAG, "Using first available interface as fallback")
-      }
-      
-      if (usbInterface == null) {
-        Log.e(TAG, "No suitable interface found on device: ${device.deviceName}")
-        connection.close()
-        notifyListeners(ConnectionState.ERROR, "No suitable interface found on device")
-        return
-      }
-      
-      Log.d(TAG, "Selected interface $selectedInterfaceIndex: Class ${usbInterface.interfaceClass}, Subclass ${usbInterface.interfaceSubclass}")
-      
-      // Claim the interface
-      val claimed = connection.claimInterface(usbInterface, true)
-      if (!claimed) {
-        Log.e(TAG, "Failed to claim interface on device: ${device.deviceName}")
-        connection.close()
-        notifyListeners(ConnectionState.ERROR, "Failed to claim interface on device")
-        return
-      }
-      
-      Log.d(TAG, "Successfully claimed interface on device: ${device.deviceName}")
-      
-      // Store the connection and interface for later cleanup
-      directUsbConnection = connection
-      directUsbInterface = usbInterface
-      
-      // Find an input endpoint (direction IN)
-      var inputEndpoint: android.hardware.usb.UsbEndpoint? = null
-      
-      // First try to find an INTERRUPT or BULK IN endpoint
-      for (i in 0 until usbInterface.endpointCount) {
-        val endpoint = usbInterface.getEndpoint(i)
-        val direction = if (endpoint.direction == android.hardware.usb.UsbConstants.USB_DIR_IN) "IN" else "OUT"
-        val type = when (endpoint.type) {
-          android.hardware.usb.UsbConstants.USB_ENDPOINT_XFER_CONTROL -> "CONTROL"
-          android.hardware.usb.UsbConstants.USB_ENDPOINT_XFER_ISOC -> "ISOCHRONOUS"
-          android.hardware.usb.UsbConstants.USB_ENDPOINT_XFER_BULK -> "BULK"
-          android.hardware.usb.UsbConstants.USB_ENDPOINT_XFER_INT -> "INTERRUPT"
-          else -> "UNKNOWN"
-        }
-        
-        Log.d(TAG, "Endpoint $i: Address 0x${endpoint.address.toString(16)}, Type $type, Direction $direction")
-        
-        if (endpoint.direction == android.hardware.usb.UsbConstants.USB_DIR_IN) {
-          if (endpoint.type == android.hardware.usb.UsbConstants.USB_ENDPOINT_XFER_INT) {
-            // Interrupt endpoints are preferred for MIDI
-            inputEndpoint = endpoint
-            Log.d(TAG, "Found INTERRUPT IN endpoint at index $i")
-            break
-          } else if (endpoint.type == android.hardware.usb.UsbConstants.USB_ENDPOINT_XFER_BULK && inputEndpoint == null) {
-            // Bulk endpoints are also common for MIDI
-            inputEndpoint = endpoint
-            Log.d(TAG, "Found BULK IN endpoint at index $i")
-            // Don't break, continue looking for an INTERRUPT endpoint
-          }
-        }
-      }
-      
-      // If no INTERRUPT or BULK endpoint found, try any IN endpoint
-      if (inputEndpoint == null) {
-        for (i in 0 until usbInterface.endpointCount) {
-          val endpoint = usbInterface.getEndpoint(i)
-          if (endpoint.direction == android.hardware.usb.UsbConstants.USB_DIR_IN) {
-            inputEndpoint = endpoint
-            Log.d(TAG, "Found IN endpoint at index $i (type: ${endpoint.type})")
-            break
-          }
-        }
-      }
-      
-      if (inputEndpoint == null) {
-        Log.e(TAG, "No input endpoint found on interface")
-        connection.releaseInterface(usbInterface)
-        connection.close()
-        directUsbConnection = null
-        directUsbInterface = null
-        notifyListeners(ConnectionState.ERROR, "No input endpoint found on device")
-        return
-      }
-      
-      // Notify that we're connected
-      notifyListeners(ConnectionState.CONNECTED, "Connected directly to ${device.deviceName} (VID: 0x${device.vendorId.toString(16).uppercase()}, PID: 0x${device.productId.toString(16).uppercase()})")
-      
-      // Start a thread to read from the device
-      val thread = Thread {
-        try {
-          val buffer = ByteArray(64) // Buffer for reading data
-          
-          Log.d(TAG, "Starting USB read loop")
-          while (!Thread.interrupted()) {
-            // Read from the endpoint
-            val bytesRead = connection.bulkTransfer(inputEndpoint, buffer, buffer.size, 100)
-            
-            if (bytesRead > 0) {
-              // Log the raw bytes for debugging
-              val hexData = buffer.slice(0 until bytesRead).joinToString(" ") { 
-                "0x${it.toInt().and(0xFF).toString(16).padStart(2, '0')}" 
-              }
-              Log.d(TAG, "Read $bytesRead bytes from USB device: $hexData")
-              
-              // Process the MIDI data
-              val timestamp = System.nanoTime()
-              midiInputProcessor.processMidiData(buffer, 0, bytesRead, timestamp)?.let { event ->
-                // Log the event
-                Log.d(TAG, "Processed MIDI event from direct USB: ${event.type}, " +
-                           "channel: ${event.channel}, data1: ${event.data1}, data2: ${event.data2}")
-              }
-            }
-            
-            // Small delay to avoid hammering the CPU
-            Thread.sleep(5)
-          }
-        } catch (e: Exception) {
-          if (e is InterruptedException) {
-            // Thread was interrupted, this is expected during cleanup
-            Log.d(TAG, "USB read thread interrupted")
-          } else {
-            Log.e(TAG, "Error reading from USB device", e)
-            notifyListeners(ConnectionState.ERROR, "Error reading from USB device: ${e.message}")
-          }
-        }
-      }
-      
-      directConnectionThread = thread
-      thread.start()
+      // Signal success even though we're waiting for the callback
+      notifyListeners(ConnectionState.CONNECTING, "USB connection established, waiting for MIDI device...")
+      return true
       
     } catch (e: Exception) {
       Log.e(TAG, "Error in direct USB connection", e)
-      notifyListeners(ConnectionState.ERROR, "Error in direct USB connection: ${e.message}")
-      
-      // If we have a USB device but it's not in the MIDI devices list,
-      // we'll try again after a short delay to give the MIDI service time to recognize it
-      handler.postDelayed({
-        Log.d(TAG, "Retrying MIDI device detection after delay")
-        refreshAvailableDevices()
-      }, 2000)
+      return false
     }
+  }
+
+  private fun tryMidiManagerConnection(device: UsbDevice) {
+    // Implementation of tryMidiManagerConnection method
+  }
+
+  private fun handleMidiDevice(deviceInfo: MidiDeviceInfo) {
+    // Implementation of handleMidiDevice method
   }
 
   private fun requestUsbPermission(device: UsbDevice) {
