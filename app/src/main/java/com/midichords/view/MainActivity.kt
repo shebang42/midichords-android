@@ -14,6 +14,8 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.ViewModelProvider
 import com.midichords.databinding.ActivityMainBinding
 import com.midichords.midi.ConnectionState
+import com.midichords.midi.MidiEvent
+import com.midichords.midi.MidiEventListener
 import com.midichords.midi.MidiEventType
 import com.midichords.viewmodel.MainViewModel
 import java.text.SimpleDateFormat

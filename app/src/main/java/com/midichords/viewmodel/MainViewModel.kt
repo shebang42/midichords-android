@@ -246,6 +246,20 @@ class MainViewModel(application: Application) : AndroidViewModel(application), M
     return "${noteNames[note]}$octave"
   }
 
+  /**
+   * Add a MIDI event listener to receive MIDI events
+   */
+  fun addMidiEventListener(listener: MidiEventListener) {
+    midiDeviceManager?.addMidiEventListener(listener)
+  }
+  
+  /**
+   * Remove a previously registered MIDI event listener
+   */
+  fun removeMidiEventListener(listener: MidiEventListener) {
+    midiDeviceManager?.removeMidiEventListener(listener)
+  }
+
   override fun onCleared() {
     super.onCleared()
     midiDeviceManager?.unregisterListener(this)
