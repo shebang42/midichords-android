@@ -5,336 +5,193 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
-import android.hardware.usb.*
+import android.hardware.usb.UsbDevice
+import android.hardware.usb.UsbManager
 import android.media.midi.MidiDevice
 import android.media.midi.MidiDeviceInfo
 import android.media.midi.MidiManager
-import android.media.midi.MidiOutputPort
-import android.os.Build
-import android.os.Bundle
-import android.os.Handler
-import android.os.Looper
 import android.util.Log
-import com.midichords.viewmodel.ConnectionState
-import java.io.IOException
 import java.util.concurrent.CopyOnWriteArrayList
 
-/**
- * Implementation of MidiDeviceManager for handling USB MIDI device connections.
- */
 class MidiDeviceManagerImpl(
   private val context: Context,
-  private val usbManager: UsbManager = context.getSystemService(Context.USB_SERVICE) as UsbManager,
-  private val midiManager: MidiManager? = context.getSystemService(Context.MIDI_SERVICE) as? MidiManager
+  private val midiManager: MidiManager?,
+  private val usbManager: UsbManager
 ) : MidiDeviceManager {
-
-  init {
-    if (midiManager == null) {
-      throw IllegalStateException("MIDI service not available on this device")
-    }
-  }
 
   companion object {
     private const val TAG = "MidiDeviceManagerImpl"
     private const val ACTION_USB_PERMISSION = "com.midichords.USB_PERMISSION"
   }
 
-  private val mainHandler = Handler(Looper.getMainLooper())
-  private val pendingIntentFlags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-  } else {
-    PendingIntent.FLAG_UPDATE_CURRENT
-  }
-
-  private val listeners = CopyOnWriteArrayList<ConnectionStateListener>()
-  private val midiEventListeners = CopyOnWriteArrayList<MidiEventListener>()
-  private var currentDevice: UsbDevice? = null
-  private var midiDevice: MidiDevice? = null
-  private var permissionIntent: PendingIntent? = null
-  private var deviceCallback: MidiManager.DeviceCallback? = null
-  private var midiInputProcessor: MidiInputProcessor? = null
-  private var midiOutputPort: MidiOutputPort? = null
+  private val listeners = CopyOnWriteArrayList<MidiDeviceListener>()
+  private var currentDevice: MidiDevice? = null
+  private val midiInputProcessor = MidiInputProcessorImpl()
+  private var currentDeviceInfo: MidiDeviceInfo? = null
 
   private val usbReceiver = object : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
-      try {
-        when (intent.action) {
-          ACTION_USB_PERMISSION -> {
-            synchronized(this) {
-              val device = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                intent.getParcelableExtra(UsbManager.EXTRA_DEVICE, UsbDevice::class.java)
-              } else {
-                @Suppress("DEPRECATION")
-                intent.getParcelableExtra(UsbManager.EXTRA_DEVICE)
+      when (intent.action) {
+        ACTION_USB_PERMISSION -> {
+          synchronized(this) {
+            val device: UsbDevice? = intent.getParcelableExtra(UsbManager.EXTRA_DEVICE)
+            if (intent.getBooleanExtra(UsbManager.EXTRA_PERMISSION_GRANTED, false)) {
+              device?.let {
+                Log.d(TAG, "USB permission granted for device: ${it.deviceName}")
+                connectToUsbDevice(it)
               }
-
-              Log.d(TAG, "USB Permission result received for device: ${device?.deviceName}")
-              if (intent.getBooleanExtra(UsbManager.EXTRA_PERMISSION_GRANTED, false)) {
-                device?.let { connectToDevice(it) }
-              } else {
-                notifyListeners(ConnectionState.ERROR, "Permission denied for device")
-              }
-            }
-          }
-          UsbManager.ACTION_USB_DEVICE_ATTACHED -> {
-            val device = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-              intent.getParcelableExtra(UsbManager.EXTRA_DEVICE, UsbDevice::class.java)
             } else {
-              @Suppress("DEPRECATION")
-              intent.getParcelableExtra(UsbManager.EXTRA_DEVICE)
+              Log.d(TAG, "USB permission denied")
+              notifyListeners(ConnectionState.ERROR, "USB permission denied")
             }
-            Log.d(TAG, "USB Device attached: ${device?.deviceName}")
-            device?.let { requestPermission(it) }
           }
-          UsbManager.ACTION_USB_DEVICE_DETACHED -> {
-            Log.d(TAG, "USB Device detached")
+        }
+        UsbManager.ACTION_USB_DEVICE_ATTACHED -> {
+          val device: UsbDevice? = intent.getParcelableExtra(UsbManager.EXTRA_DEVICE)
+          device?.let {
+            Log.d(TAG, "USB device attached: ${it.deviceName}")
+            requestUsbPermission(it)
+          }
+        }
+        UsbManager.ACTION_USB_DEVICE_DETACHED -> {
+          val device: UsbDevice? = intent.getParcelableExtra(UsbManager.EXTRA_DEVICE)
+          device?.let {
+            Log.d(TAG, "USB device detached: ${it.deviceName}")
             disconnect()
           }
         }
-      } catch (e: Exception) {
-        Log.e(TAG, "Error in USB receiver", e)
-        notifyListeners(ConnectionState.ERROR, "Error processing USB event: ${e.message}")
       }
     }
   }
 
   init {
-    try {
-      // Register USB receiver
-      Log.d(TAG, "Initializing MidiDeviceManager")
-      val intent = Intent(ACTION_USB_PERMISSION).apply {
-        setPackage(context.packageName)  // Make the intent explicit
-      }
-      permissionIntent = PendingIntent.getBroadcast(context, 0, intent, pendingIntentFlags)
-      val filter = IntentFilter().apply {
-        addAction(ACTION_USB_PERMISSION)
-        addAction(UsbManager.ACTION_USB_DEVICE_ATTACHED)
-        addAction(UsbManager.ACTION_USB_DEVICE_DETACHED)
-      }
-      context.registerReceiver(
-        usbReceiver,
-        filter,
-        Context.RECEIVER_NOT_EXPORTED
-      )
-      Log.d(TAG, "USB receiver registered")
-      notifyListeners(ConnectionState.DISCONNECTED)
-    } catch (e: Exception) {
-      Log.e(TAG, "Error initializing MidiDeviceManager", e)
-      notifyListeners(ConnectionState.ERROR, "Error initializing MIDI: ${e.message}")
-      throw e
+    if (midiManager == null) {
+      throw IllegalStateException("MIDI service not available")
     }
+
+    val filter = IntentFilter(ACTION_USB_PERMISSION).apply {
+      addAction(UsbManager.ACTION_USB_DEVICE_ATTACHED)
+      addAction(UsbManager.ACTION_USB_DEVICE_DETACHED)
+    }
+
+    context.registerReceiver(
+      usbReceiver,
+      filter,
+      Context.RECEIVER_NOT_EXPORTED
+    )
+
+    Log.d(TAG, "MidiDeviceManager initialized")
   }
 
-  override fun registerListener(listener: ConnectionStateListener) {
-    listeners.addIfAbsent(listener)
+  override fun registerListener(listener: MidiDeviceListener) {
+    listeners.add(listener)
   }
 
-  override fun unregisterListener(listener: ConnectionStateListener) {
+  override fun unregisterListener(listener: MidiDeviceListener) {
     listeners.remove(listener)
   }
 
-  override fun registerMidiEventListener(listener: MidiEventListener) {
-    midiEventListeners.addIfAbsent(listener)
-    midiInputProcessor?.registerListener(listener)
-  }
-
-  override fun unregisterMidiEventListener(listener: MidiEventListener) {
-    midiEventListeners.remove(listener)
-    midiInputProcessor?.unregisterListener(listener)
-  }
-
-  override fun requestPermission(device: UsbDevice) {
+  override fun refreshAvailableDevices() {
     try {
-      Log.d(TAG, "Requesting permission for device: ${device.deviceName}")
-      if (usbManager.hasPermission(device)) {
-        Log.d(TAG, "Already have permission for device")
-        connectToDevice(device)
-      } else {
-        permissionIntent?.let { usbManager.requestPermission(device, it) }
-        notifyListeners(ConnectionState.CONNECTING, "Requesting permission for device")
+      midiManager?.devices?.let { devices ->
+        Log.d(TAG, "Found ${devices.size} MIDI devices")
+        if (devices.isEmpty()) {
+          notifyListeners(ConnectionState.DISCONNECTED, "No MIDI devices found")
+        } else {
+          // For now, just try to connect to the first device
+          connectToDevice(devices[0])
+        }
       }
     } catch (e: Exception) {
-      Log.e(TAG, "Error requesting permission", e)
-      notifyListeners(ConnectionState.ERROR, "Error requesting permission: ${e.message}")
+      Log.e(TAG, "Error refreshing devices", e)
+      notifyListeners(ConnectionState.ERROR, "Error refreshing devices: ${e.message}")
     }
   }
 
-  override fun connectToDevice(device: UsbDevice): Boolean {
+  private fun connectToDevice(deviceInfo: MidiDeviceInfo) {
     try {
-      Log.d(TAG, "Attempting to connect to device: ${device.deviceName}")
-      if (!usbManager.hasPermission(device)) {
-        Log.d(TAG, "No permission for device, requesting...")
-        requestPermission(device)
-        return false
-      }
-
-      notifyListeners(ConnectionState.CONNECTING)
-      
-      if (midiManager == null) {
-        Log.e(TAG, "MIDI service not available")
-        notifyListeners(ConnectionState.ERROR, "MIDI service not available")
-        return false
-      }
-
-      // Get existing MIDI devices
-      val devices = midiManager.devices
-      val targetDeviceId = device.deviceId
-      
-      Log.d(TAG, "Found ${devices.size} MIDI devices")
-      
-      // Look for an existing device with matching ID
-      val existingDevice = devices.firstOrNull { 
-        it.properties.getInt(MidiDeviceInfo.PROPERTY_USB_DEVICE, -1) == targetDeviceId
-      }
-
-      if (existingDevice != null) {
-        Log.d(TAG, "Found existing MIDI device")
-        openMidiDevice(existingDevice)
-      } else {
-        Log.d(TAG, "No existing MIDI device found, creating new connection")
-        // Create connection to USB device
-        val connection = usbManager.openDevice(device)
-        if (connection == null) {
-          Log.e(TAG, "Failed to open USB connection")
-          notifyListeners(ConnectionState.ERROR, "Failed to open USB connection")
-          return false
+      midiManager?.openDevice(deviceInfo, { device ->
+        if (device != null) {
+          currentDevice = device
+          currentDeviceInfo = deviceInfo
+          setupMidiInput(device)
+          notifyListeners(ConnectionState.CONNECTED, "Connected to ${deviceInfo.properties.getString(MidiDeviceInfo.PROPERTY_NAME)}")
+        } else {
+          notifyListeners(ConnectionState.ERROR, "Failed to open MIDI device")
         }
-
-        // Let the MidiManager handle the device
-        deviceCallback = object : MidiManager.DeviceCallback() {
-          override fun onDeviceAdded(midiDeviceInfo: MidiDeviceInfo) {
-            Log.d(TAG, "MIDI device added: ${midiDeviceInfo.properties}")
-            if (midiDeviceInfo.properties.getInt(MidiDeviceInfo.PROPERTY_USB_DEVICE, -1) == targetDeviceId) {
-              openMidiDevice(midiDeviceInfo)
-              midiManager.unregisterDeviceCallback(this)
-              deviceCallback = null
-            }
-          }
-        }.also { callback ->
-          midiManager.registerDeviceCallback(callback, mainHandler)
-        }
-      }
-
-      return true
+      }, null)
     } catch (e: Exception) {
       Log.e(TAG, "Error connecting to device", e)
       notifyListeners(ConnectionState.ERROR, "Error connecting to device: ${e.message}")
-      return false
     }
   }
 
-  private fun openMidiDevice(deviceInfo: MidiDeviceInfo) {
+  private fun setupMidiInput(device: MidiDevice) {
     try {
-      Log.d(TAG, "Opening MIDI device: ${deviceInfo.properties}")
-      midiManager?.openDevice(deviceInfo, { device ->
-        if (device != null) {
-          Log.d(TAG, "Successfully opened MIDI device")
-          midiDevice = device
-          currentDevice = getConnectedDevice()
-          setupMidiPorts(device)
-          notifyListeners(ConnectionState.CONNECTED)
-        } else {
-          Log.e(TAG, "Failed to open MIDI device")
-          notifyListeners(ConnectionState.ERROR, "Failed to open MIDI device")
-        }
-      }, mainHandler)
-    } catch (e: Exception) {
-      Log.e(TAG, "Error opening MIDI device", e)
-      notifyListeners(ConnectionState.ERROR, "Error opening MIDI device: ${e.message}")
-    }
-  }
-
-  private fun setupMidiPorts(device: MidiDevice) {
-    try {
-      // Create a new input processor for this device
-      midiInputProcessor = MidiInputProcessorImpl().also { processor ->
-        // Register existing listeners with the new processor
-        midiEventListeners.forEach { listener ->
-          processor.registerListener(listener)
-        }
-      }
-
-      // Open the first input port (from device to app)
-      val portCount = device.info.inputPortCount
-      if (portCount > 0) {
-        midiOutputPort = device.openOutputPort(0)
-        midiOutputPort?.connect(midiInputProcessor?.getReceiver())
-        Log.d(TAG, "Connected to MIDI input port")
+      val inputPort = device.openInputPort(0)
+      if (inputPort != null) {
+        inputPort.connect(midiInputProcessor.getReceiver())
+        Log.d(TAG, "MIDI input port connected")
       } else {
-        Log.w(TAG, "Device has no input ports")
+        Log.e(TAG, "Failed to open MIDI input port")
+        notifyListeners(ConnectionState.ERROR, "Failed to open MIDI input port")
       }
     } catch (e: Exception) {
-      Log.e(TAG, "Error setting up MIDI ports", e)
-      notifyListeners(ConnectionState.ERROR, "Error setting up MIDI ports: ${e.message}")
+      Log.e(TAG, "Error setting up MIDI input", e)
+      notifyListeners(ConnectionState.ERROR, "Error setting up MIDI input: ${e.message}")
     }
+  }
+
+  private fun connectToUsbDevice(usbDevice: UsbDevice) {
+    try {
+      midiManager?.devices?.forEach { deviceInfo ->
+        if (deviceInfo.type == MidiDeviceInfo.TYPE_USB) {
+          val properties = deviceInfo.properties
+          val deviceId = properties.getInt(MidiDeviceInfo.PROPERTY_USB_DEVICE)
+          if (deviceId == usbDevice.deviceId) {
+            connectToDevice(deviceInfo)
+            return
+          }
+        }
+      }
+      notifyListeners(ConnectionState.ERROR, "USB device not recognized as MIDI device")
+    } catch (e: Exception) {
+      Log.e(TAG, "Error connecting to USB device", e)
+      notifyListeners(ConnectionState.ERROR, "Error connecting to USB device: ${e.message}")
+    }
+  }
+
+  private fun requestUsbPermission(device: UsbDevice) {
+    val permissionIntent = PendingIntent.getBroadcast(
+      context,
+      0,
+      Intent(ACTION_USB_PERMISSION),
+      PendingIntent.FLAG_IMMUTABLE
+    )
+    usbManager.requestPermission(device, permissionIntent)
   }
 
   override fun disconnect() {
     try {
-      Log.d(TAG, "Disconnecting MIDI device")
-      deviceCallback?.let { callback ->
-        midiManager?.unregisterDeviceCallback(callback)
-        deviceCallback = null
-      }
-      midiOutputPort?.disconnect(midiInputProcessor?.getReceiver())
-      midiOutputPort?.close()
-      midiOutputPort = null
-      midiDevice?.close()
-      midiDevice = null
+      currentDevice?.close()
       currentDevice = null
-      midiInputProcessor = null
-      notifyListeners(ConnectionState.DISCONNECTED)
+      currentDeviceInfo = null
+      notifyListeners(ConnectionState.DISCONNECTED, "Disconnected")
     } catch (e: Exception) {
-      Log.e(TAG, "Error disconnecting device", e)
-      notifyListeners(ConnectionState.ERROR, "Error disconnecting device: ${e.message}")
+      Log.e(TAG, "Error disconnecting", e)
+      notifyListeners(ConnectionState.ERROR, "Error disconnecting: ${e.message}")
     }
   }
 
-  override fun getAvailableDevices(): List<UsbDevice> {
-    return try {
-      usbManager.deviceList.values.filter { device ->
-        device.interfaceCount > 0 && device.getInterface(0).interfaceClass == UsbConstants.USB_CLASS_AUDIO
-      }.also { devices ->
-        Log.d(TAG, "Found ${devices.size} available USB MIDI devices")
-      }
-    } catch (e: Exception) {
-      Log.e(TAG, "Error getting available devices", e)
-      emptyList()
-    }
+  private fun notifyListeners(state: ConnectionState, message: String) {
+    listeners.forEach { it.onConnectionStateChanged(state, message) }
   }
 
-  override fun getConnectedDevice(): UsbDevice? = currentDevice
-
-  override fun dispose() {
-    try {
-      Log.d(TAG, "Disposing MidiDeviceManager")
-      disconnect()
-      try {
-        context.unregisterReceiver(usbReceiver)
-      } catch (e: IllegalArgumentException) {
-        // Receiver not registered, ignore
-        Log.w(TAG, "USB receiver was not registered")
-      }
-      listeners.clear()
-      midiEventListeners.clear()
-    } catch (e: Exception) {
-      Log.e(TAG, "Error disposing MidiDeviceManager", e)
-    }
+  override fun addMidiEventListener(listener: MidiEventListener) {
+    midiInputProcessor.registerListener(listener)
   }
 
-  private fun notifyListeners(state: ConnectionState, message: String? = null) {
-    try {
-      mainHandler.post {
-        listeners.forEach { listener ->
-          try {
-            listener.onConnectionStateChanged(state, message)
-          } catch (e: Exception) {
-            Log.e(TAG, "Error notifying listener", e)
-          }
-        }
-      }
-    } catch (e: Exception) {
-      Log.e(TAG, "Error in notifyListeners", e)
-    }
+  override fun removeMidiEventListener(listener: MidiEventListener) {
+    midiInputProcessor.unregisterListener(listener)
   }
-} 
+}
