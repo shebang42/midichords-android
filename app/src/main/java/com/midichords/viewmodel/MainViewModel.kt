@@ -14,13 +14,16 @@ import com.midichords.midi.MidiDeviceListener
 import com.midichords.midi.MidiDeviceManager
 import com.midichords.midi.MidiDeviceManagerImpl
 import com.midichords.midi.MidiEvent
-import com.midichords.midi.MidiEventListener
 import com.midichords.model.ActiveNote
+import com.midichords.model.BasicChordIdentifier
+import com.midichords.model.Chord
+import com.midichords.model.ChordIdentifier
+import com.midichords.model.ChordListener
 import com.midichords.model.NoteProcessor
 import com.midichords.model.NoteProcessorImpl
 import com.midichords.model.NoteStateListener
 
-class MainViewModel(application: Application) : AndroidViewModel(application), MidiDeviceListener, NoteStateListener {
+class MainViewModel(application: Application) : AndroidViewModel(application), MidiDeviceListener, NoteStateListener, ChordListener {
   companion object {
     private const val TAG = "MainViewModel"
   }
@@ -37,10 +40,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application), M
   private val _activeNotes = MutableLiveData<List<ActiveNote>>()
   val activeNotes: LiveData<List<ActiveNote>> = _activeNotes
 
+  private val _currentChord = MutableLiveData<Chord?>()
+  val currentChord: LiveData<Chord?> = _currentChord
+
   private val _lastMidiEvent = MutableLiveData<MidiEvent>()
   val lastMidiEvent: LiveData<MidiEvent> = _lastMidiEvent
 
   private val noteProcessor: NoteProcessor = NoteProcessorImpl()
+  private val chordIdentifier: ChordIdentifier = BasicChordIdentifier().apply {
+    registerChordListener(this@MainViewModel)
+  }
 
   private val midiDeviceManager = try {
     val midiManager = application.getSystemService(Context.MIDI_SERVICE) as? MidiManager
@@ -59,7 +68,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application), M
     _connectionState.value = ConnectionState.DISCONNECTED
     _connectionMessage.value = "Disconnected"
     _activeNotes.value = emptyList()
+    _currentChord.value = null
     noteProcessor.registerNoteListener(this)
+    
+    // Connect the chord identifier to the note processor
+    if (chordIdentifier is NoteStateListener) {
+      noteProcessor.registerNoteListener(chordIdentifier as NoteStateListener)
+    }
+    
     refreshAvailableDevices()
   }
 
@@ -120,11 +136,28 @@ class MainViewModel(application: Application) : AndroidViewModel(application), M
     Log.d(TAG, "Sustain pedal state changed: $isOn")
   }
 
+  // ChordListener implementation
+  override fun onChordIdentified(chord: Chord, notes: List<ActiveNote>) {
+    Log.d(TAG, "Chord identified: ${chord.getName()}")
+    _currentChord.postValue(chord)
+  }
+
+  override fun onNoChordIdentified(notes: List<ActiveNote>) {
+    Log.d(TAG, "No chord identified")
+    _currentChord.postValue(null)
+  }
+
   override fun onCleared() {
     super.onCleared()
     midiDeviceManager?.unregisterListener(this)
     midiDeviceManager?.removeMidiEventListener(noteProcessor)
     noteProcessor.unregisterNoteListener(this)
+    
+    if (chordIdentifier is NoteStateListener) {
+      noteProcessor.unregisterNoteListener(chordIdentifier as NoteStateListener)
+    }
+    
+    chordIdentifier.unregisterChordListener(this)
   }
 }
 
