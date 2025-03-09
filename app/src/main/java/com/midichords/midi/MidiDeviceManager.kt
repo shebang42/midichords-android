@@ -29,7 +29,7 @@ interface MidiDeviceManager {
    * @param device The USB device to connect to
    * @return true if connection was initiated successfully, false otherwise
    */
-  fun connect(device: UsbDevice): Boolean
+  fun connectToDevice(device: UsbDevice): Boolean
 
   /**
    * Disconnect from the currently connected MIDI device.
