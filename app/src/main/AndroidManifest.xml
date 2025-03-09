@@ -7,6 +7,8 @@
     
     <!-- Permissions -->
     <uses-permission android:name="android.permission.USB_PERMISSION" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
 
     <application
         android:allowBackup="true"

@@ -132,13 +132,30 @@ class MidiDeviceManagerImpl(
       addAction(UsbManager.ACTION_USB_DEVICE_DETACHED)
     }
 
-    context.registerReceiver(
-      usbReceiver,
-      filter,
-      null,
-      Handler(context.mainLooper),
-      Context.RECEIVER_EXPORTED
-    )
+    try {
+      context.registerReceiver(
+        usbReceiver,
+        filter,
+        null,
+        Handler(context.mainLooper),
+        Context.RECEIVER_NOT_EXPORTED
+      )
+    } catch (e: SecurityException) {
+      // Fall back to the older registration method for compatibility
+      Log.w(TAG, "Failed to register receiver with RECEIVER_NOT_EXPORTED flag, falling back", e)
+      try {
+        @Suppress("DEPRECATION")
+        context.registerReceiver(
+          usbReceiver,
+          filter,
+          null,
+          Handler(context.mainLooper)
+        )
+      } catch (e2: Exception) {
+        Log.e(TAG, "Failed to register receiver even with fallback method", e2)
+        throw IllegalStateException("Could not register USB receiver: ${e2.message}")
+      }
+    }
 
     Log.d(TAG, "MidiDeviceManager initialized")
     

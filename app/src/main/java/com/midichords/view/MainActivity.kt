@@ -1,5 +1,6 @@
 package com.midichords.view
 
+import android.content.Intent
 import android.hardware.usb.UsbDevice
 import android.hardware.usb.UsbManager
 import android.os.Bundle
@@ -50,6 +51,12 @@ class MainActivity : AppCompatActivity() {
       Log.d(TAG, "Test MIDI button clicked")
       viewModel.sendTestMidiMessage()
       Toast.makeText(this, "Sending test MIDI message (C4 note)", Toast.LENGTH_SHORT).show()
+    }
+
+    // Add USB mode settings button
+    binding.usbModeButton.setOnClickListener {
+      Log.d(TAG, "USB mode button clicked")
+      showUsbModeInstructions()
     }
 
     // Set up device list click listener
@@ -257,6 +264,46 @@ class MainActivity : AppCompatActivity() {
     }
     
     binding.deviceDetails.text = details.toString()
+  }
+
+  /**
+   * Shows instructions for setting USB mode to MIDI
+   */
+  private fun showUsbModeInstructions() {
+    val builder = androidx.appcompat.app.AlertDialog.Builder(this)
+    builder.setTitle("USB Mode Settings")
+      .setMessage(
+        "To use a USB MIDI device, you need to:\n\n" +
+        "1. Pull down the notification shade\n" +
+        "2. Tap on the USB notification\n" +
+        "3. Select 'MIDI' from the options\n\n" +
+        "If you can't select 'This device' mode, try:\n" +
+        "- Disconnecting and reconnecting your MIDI device\n" +
+        "- Using a different USB cable\n" +
+        "- Restarting your device\n\n" +
+        "Would you like to open Android USB settings now?"
+      )
+      .setPositiveButton("Open Settings") { _, _ ->
+        openUsbSettings()
+      }
+      .setNegativeButton("Cancel") { dialog, _ ->
+        dialog.dismiss()
+      }
+      .show()
+  }
+
+  /**
+   * Opens Android USB settings
+   */
+  private fun openUsbSettings() {
+    try {
+      // Try to open USB settings directly
+      val intent = Intent(android.provider.Settings.ACTION_USB_SETTINGS)
+      startActivity(intent)
+    } catch (e: Exception) {
+      Log.e(TAG, "Failed to open USB settings", e)
+      Toast.makeText(this, "Could not open USB settings. Please open them manually.", Toast.LENGTH_LONG).show()
+    }
   }
 
   override fun onResume() {

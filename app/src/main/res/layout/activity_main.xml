@@ -39,6 +39,14 @@
             android:text="Scan for USB Devices"
             android:layout_marginTop="8dp" />
 
+        <!-- USB Mode Settings button -->
+        <Button
+            android:id="@+id/usbModeButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="USB Mode Settings"
+            android:layout_marginTop="8dp" />
+
         <!-- Device list -->
         <ListView
             android:id="@+id/deviceList"
