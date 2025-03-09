@@ -7,7 +7,7 @@ import android.hardware.usb.UsbManager
 import android.media.midi.MidiDevice
 import android.media.midi.MidiDeviceInfo
 import android.media.midi.MidiManager
-import com.midichords.viewmodel.ConnectionState
+import com.midichords.midi.ConnectionState
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith

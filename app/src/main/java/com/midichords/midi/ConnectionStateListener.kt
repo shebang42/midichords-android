@@ -1,6 +1,6 @@
 package com.midichords.midi
 
-import com.midichords.viewmodel.ConnectionState
+import com.midichords.midi.ConnectionState
 
 /**
  * Interface for listening to MIDI device connection state changes.
