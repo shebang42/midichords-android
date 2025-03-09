@@ -296,7 +296,7 @@ class MidiInputProcessorImpl : MidiInputProcessor {
   /**
    * Clean up any resources when the processor is no longer needed
    */
-  fun cleanup() {
+  override fun cleanup() {
     Log.d(TAG, "Cleaning up MIDI input processor")
     // Close the input port if it's still open
     try {
