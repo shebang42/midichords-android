@@ -93,7 +93,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application), M
   fun refreshAvailableDevices() {
     try {
       // Get USB devices directly from UsbManager
-      val usbManager = context.getSystemService(Context.USB_SERVICE) as UsbManager
+      val usbManager = application.getSystemService(Context.USB_SERVICE) as UsbManager
       val allDevices = usbManager.deviceList.values.toList()
       
       // Filter out 0xBDA devices
@@ -119,7 +119,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application), M
       }
       
       // Also let the MIDI device manager refresh, but it will also filter out 0xBDA devices
-      midiDeviceManager.refreshAvailableDevices()
+      midiDeviceManager?.refreshAvailableDevices()
     } catch (e: Exception) {
       Log.e(TAG, "Error refreshing devices", e)
       _connectionState.value = ConnectionState.ERROR
