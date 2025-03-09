@@ -75,7 +75,7 @@ class MidiInputProcessorImpl : MidiInputProcessor {
           if (event != null) {
             latestEvent = event
             // Dispatch the event to listeners
-            dispatchEvent(event)
+            notifyListeners(event)
           }
           
           i += 4 // Move to the next USB MIDI packet
@@ -99,7 +99,7 @@ class MidiInputProcessorImpl : MidiInputProcessor {
         if (event != null) {
           latestEvent = event
           // Dispatch the event to listeners
-          dispatchEvent(event)
+          notifyListeners(event)
         }
       }
       
