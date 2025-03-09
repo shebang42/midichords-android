@@ -155,6 +155,15 @@ class MainActivity : AppCompatActivity() {
     val usbManager = getSystemService(USB_SERVICE) as UsbManager
     val allDevices = usbManager.deviceList
     
+    // Log ALL devices for debugging
+    Log.d(TAG, "===== ALL USB DEVICES =====")
+    allDevices.forEach { (name, device) ->
+      val vendorId = "0x${device.vendorId.toString(16).uppercase()}"
+      val productId = "0x${device.productId.toString(16).uppercase()}"
+      Log.d(TAG, "Device: $name, VID: $vendorId, PID: $productId, Class: ${device.deviceClass}, Interfaces: ${device.interfaceCount}")
+    }
+    Log.d(TAG, "==========================")
+    
     if (allDevices.isEmpty()) {
       Toast.makeText(this, "No USB devices found", Toast.LENGTH_SHORT).show()
       binding.deviceDetails.text = "No USB devices found"
@@ -165,11 +174,29 @@ class MainActivity : AppCompatActivity() {
     val filteredDevices = allDevices.filter { (_, device) -> device.vendorId != 0x0BDA }
     
     if (filteredDevices.isEmpty()) {
-      Toast.makeText(this, "Only found USB converter devices. Please connect a MIDI device directly.", Toast.LENGTH_LONG).show()
-      binding.deviceDetails.text = "Only found USB converter devices. Please connect a MIDI device directly."
+      Toast.makeText(this, "Only found USB converter devices (0xBDA). Please connect a MIDI device directly.", Toast.LENGTH_LONG).show()
       
-      // Still show all devices for debugging purposes
-      displayAllDevices(allDevices)
+      // Show detailed information about the converter device for debugging
+      val details = StringBuilder("Only found USB converter devices:\n\n")
+      
+      allDevices.forEach { (name, device) ->
+        val vendorId = "0x${device.vendorId.toString(16).uppercase()}"
+        val productId = "0x${device.productId.toString(16).uppercase()}"
+        
+        details.append("Device: $name\n")
+        details.append("  Vendor ID: $vendorId\n")
+        details.append("  Product ID: $productId\n")
+        details.append("  Class: ${device.deviceClass}\n")
+        details.append("  Interfaces: ${device.interfaceCount}\n\n")
+        
+        // Log interfaces
+        for (i in 0 until device.interfaceCount) {
+          val usbInterface = device.getInterface(i)
+          details.append("  Interface $i: Class ${usbInterface.interfaceClass}, Subclass ${usbInterface.interfaceSubclass}\n")
+        }
+      }
+      
+      binding.deviceDetails.text = details.toString()
       return
     }
     
@@ -186,7 +213,7 @@ class MainActivity : AppCompatActivity() {
       
       deviceMap[displayName] = device
       deviceNames.add(displayName)
-      Log.d(TAG, "Found USB device: $displayName (ID: ${device.deviceId})")
+      Log.d(TAG, "Found non-converter USB device: $displayName (ID: ${device.deviceId})")
     }
     
     // Update the adapter
@@ -195,13 +222,25 @@ class MainActivity : AppCompatActivity() {
     deviceAdapter.notifyDataSetChanged()
     
     // Show a message
-    Toast.makeText(this, "Found ${filteredDevices.size} USB devices (excluding converters)", Toast.LENGTH_SHORT).show()
+    Toast.makeText(this, "Found ${filteredDevices.size} USB devices (excluding 0xBDA converters)", Toast.LENGTH_SHORT).show()
     
     // If we have devices, show details for the first one
     if (deviceNames.isNotEmpty()) {
       val firstDevice = deviceMap[deviceNames[0]]
       firstDevice?.let {
         displayDeviceDetails(it)
+        
+        // Add a dialog to ask if the user wants to connect to the device
+        val builder = androidx.appcompat.app.AlertDialog.Builder(this)
+        builder.setTitle("Connect to MIDI Device")
+          .setMessage("Do you want to connect to this device?\n\n${it.deviceName}\nVendor ID: 0x${it.vendorId.toString(16).uppercase()}\nProduct ID: 0x${it.productId.toString(16).uppercase()}")
+          .setPositiveButton("Connect") { _, _ ->
+            viewModel.connectToDevice(it)
+          }
+          .setNegativeButton("Cancel") { dialog, _ ->
+            dialog.dismiss()
+          }
+          .show()
       }
     }
   }

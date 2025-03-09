@@ -174,36 +174,71 @@ class MidiDeviceManagerImpl(
   override fun refreshAvailableDevices() {
     try {
       // First, check for USB devices directly
-      val allUsbDevices = usbManager.deviceList.values.toList()
+      val allUsbDevices = usbManager.deviceList
       
-      // Completely exclude the 0xBDA converter device
-      val filteredDevices = allUsbDevices.filter { device -> 
+      // Log ALL devices for debugging
+      Log.d(TAG, "===== ALL USB DEVICES =====")
+      allUsbDevices.forEach { (name, device) ->
+        val vendorId = "0x${device.vendorId.toString(16).uppercase()}"
+        val productId = "0x${device.productId.toString(16).uppercase()}"
+        Log.d(TAG, "Device: $name, VID: $vendorId, PID: $productId, Class: ${device.deviceClass}, Interfaces: ${device.interfaceCount}")
+      }
+      Log.d(TAG, "==========================")
+      
+      // Check if we have any devices at all
+      if (allUsbDevices.isEmpty()) {
+        Log.d(TAG, "No USB devices found at all")
+        notifyListeners(ConnectionState.ERROR, "No USB devices found. Please connect a MIDI device.")
+        
+        // Try the MIDI manager approach as fallback
+        @Suppress("DEPRECATION")
+        val devices = midiManager?.devices ?: emptyArray()
+        handleDeviceList(devices)
+        return
+      }
+      
+      // Check if we have any non-0xBDA devices
+      val nonConverterDevices = allUsbDevices.filter { (_, device) -> 
         device.vendorId != 0x0BDA 
       }
       
-      Log.d(TAG, "Found ${allUsbDevices.size} total USB devices, ${filteredDevices.size} after filtering out converters")
+      Log.d(TAG, "Found ${allUsbDevices.size} total USB devices, ${nonConverterDevices.size} non-converter devices")
       
-      if (filteredDevices.isNotEmpty()) {
-        // Select the first non-converter device
-        val selectedDevice = filteredDevices.first()
-        val vendorId = "0x${selectedDevice.vendorId.toString(16).uppercase()}"
-        val productId = "0x${selectedDevice.productId.toString(16).uppercase()}"
-        
-        Log.d(TAG, "Selected device: ${selectedDevice.deviceName} (VID:$vendorId, PID:$productId)")
-        notifyListeners(ConnectionState.CONNECTING, "Connecting to device: ${selectedDevice.deviceName} (VID:$vendorId, PID:$productId)")
-        requestUsbPermission(selectedDevice)
-        return
-      } else if (allUsbDevices.isNotEmpty()) {
-        // If we only have converter devices, show a message
-        Log.d(TAG, "Only found USB converter devices, no MIDI devices")
-        notifyListeners(ConnectionState.ERROR, "Only found USB converter devices. Please connect a MIDI device directly.")
+      if (nonConverterDevices.isEmpty()) {
+        // We only have 0xBDA devices - show a clear error
+        Log.d(TAG, "Only found 0xBDA converter devices, no MIDI devices")
+        notifyListeners(ConnectionState.ERROR, "Only found USB converter devices (0xBDA). Please connect a MIDI device directly.")
         return
       }
       
-      // If no USB devices found, try the MIDI manager approach
-      @Suppress("DEPRECATION")
-      val devices = midiManager?.devices ?: emptyArray()
-      handleDeviceList(devices)
+      // We have at least one non-converter device - use the first one
+      val firstNonConverterEntry = nonConverterDevices.entries.first()
+      val selectedDevice = firstNonConverterEntry.value
+      val deviceName = firstNonConverterEntry.key
+      
+      val vendorId = "0x${selectedDevice.vendorId.toString(16).uppercase()}"
+      val productId = "0x${selectedDevice.productId.toString(16).uppercase()}"
+      
+      Log.d(TAG, "Selected non-converter device: $deviceName (VID:$vendorId, PID:$productId)")
+      
+      // Display detailed information about the selected device
+      Log.d(TAG, "Selected device details:")
+      Log.d(TAG, "  Name: ${selectedDevice.deviceName}")
+      Log.d(TAG, "  Device ID: ${selectedDevice.deviceId}")
+      Log.d(TAG, "  Vendor ID: $vendorId")
+      Log.d(TAG, "  Product ID: $productId")
+      Log.d(TAG, "  Device Class: ${selectedDevice.deviceClass}")
+      Log.d(TAG, "  Interface Count: ${selectedDevice.interfaceCount}")
+      
+      // Log interfaces
+      for (i in 0 until selectedDevice.interfaceCount) {
+        val usbInterface = selectedDevice.getInterface(i)
+        Log.d(TAG, "  Interface $i: Class ${usbInterface.interfaceClass}, Subclass ${usbInterface.interfaceSubclass}")
+      }
+      
+      notifyListeners(ConnectionState.CONNECTING, "Connecting to non-converter device: $deviceName (VID:$vendorId, PID:$productId)")
+      requestUsbPermission(selectedDevice)
+      
     } catch (e: Exception) {
       Log.e(TAG, "Error refreshing devices", e)
       notifyListeners(ConnectionState.ERROR, "Error refreshing devices: ${e.message}")
@@ -483,7 +518,15 @@ class MidiDeviceManagerImpl(
 
   override fun connectToUsbDevice(device: UsbDevice) {
     try {
+      // HARD BLOCK: Refuse to connect to 0xBDA devices
+      if (device.vendorId == 0x0BDA) {
+        Log.e(TAG, "Refusing to connect to 0xBDA converter device: ${device.deviceName}")
+        notifyListeners(ConnectionState.ERROR, "Cannot connect to USB converter device (0xBDA). Please connect a MIDI device directly.")
+        return
+      }
+      
       Log.d(TAG, "Attempting to connect to USB device: ${device.deviceName}")
+      Log.d(TAG, "Device details: VID: 0x${device.vendorId.toString(16).uppercase()}, PID: 0x${device.productId.toString(16).uppercase()}")
       
       // First check if we have permission
       if (!usbManager.hasPermission(device)) {
@@ -494,24 +537,32 @@ class MidiDeviceManagerImpl(
       
       // Check if this device has a MIDI interface
       var hasMidiInterface = false
+      var selectedInterfaceIndex = -1
+      
+      Log.d(TAG, "Checking interfaces for device: ${device.deviceName}")
       for (i in 0 until device.interfaceCount) {
         val usbInterface = device.getInterface(i)
+        Log.d(TAG, "Interface $i: Class ${usbInterface.interfaceClass}, Subclass ${usbInterface.interfaceSubclass}")
+        
         if (usbInterface.interfaceClass == 1 && usbInterface.interfaceSubclass == 3) {
           hasMidiInterface = true
-          Log.d(TAG, "Device has a standard MIDI interface (Class 1, Subclass 3)")
+          selectedInterfaceIndex = i
+          Log.d(TAG, "Found standard MIDI interface at index $i")
           break
         }
         // Check for other common MIDI interface patterns
         else if (usbInterface.interfaceClass == 2 && usbInterface.interfaceSubclass == 6) {
           // Some MIDI devices use Communications class (2) with subclass 6
           hasMidiInterface = true
-          Log.d(TAG, "Device has a likely MIDI interface (Class 2, Subclass 6)")
+          selectedInterfaceIndex = i
+          Log.d(TAG, "Found likely MIDI interface at index $i (Class 2, Subclass 6)")
           break
         }
         else if (usbInterface.interfaceClass == 255) {
           // Vendor-specific class, might be MIDI
-          Log.d(TAG, "Device has a vendor-specific interface (Class 255) that might be MIDI")
           hasMidiInterface = true
+          selectedInterfaceIndex = i
+          Log.d(TAG, "Found vendor-specific interface at index $i that might be MIDI")
           break
         }
       }
@@ -520,6 +571,8 @@ class MidiDeviceManagerImpl(
         Log.e(TAG, "Device does not appear to have a MIDI interface")
         notifyListeners(ConnectionState.ERROR, "Device does not appear to have a standard MIDI interface, but we'll try anyway")
         // We'll continue anyway since some devices don't properly report their interfaces
+      } else {
+        Log.d(TAG, "Device has a potential MIDI interface at index $selectedInterfaceIndex")
       }
       
       // Try to find the device in the MIDI manager
@@ -566,7 +619,15 @@ class MidiDeviceManagerImpl(
   private var directConnectionThread: Thread? = null
   
   private fun tryDirectConnection(device: UsbDevice) {
+    // HARD BLOCK: Refuse to connect to 0xBDA devices
+    if (device.vendorId == 0x0BDA) {
+      Log.e(TAG, "Refusing direct connection to 0xBDA converter device: ${device.deviceName}")
+      notifyListeners(ConnectionState.ERROR, "Cannot connect to USB converter device (0xBDA). Please connect a MIDI device directly.")
+      return
+    }
+    
     Log.d(TAG, "Attempting direct connection to USB device: ${device.deviceName}")
+    Log.d(TAG, "Device details: VID: 0x${device.vendorId.toString(16).uppercase()}, PID: 0x${device.productId.toString(16).uppercase()}")
     notifyListeners(ConnectionState.CONNECTING, "Attempting direct connection to ${device.deviceName}")
     
     try {
@@ -720,7 +781,7 @@ class MidiDeviceManagerImpl(
       }
       
       // Notify that we're connected
-      notifyListeners(ConnectionState.CONNECTED, "Connected directly to ${device.deviceName}")
+      notifyListeners(ConnectionState.CONNECTED, "Connected directly to ${device.deviceName} (VID: 0x${device.vendorId.toString(16).uppercase()}, PID: 0x${device.productId.toString(16).uppercase()})")
       
       // Start a thread to read from the device
       val thread = Thread {
