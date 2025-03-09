@@ -1,7 +1,9 @@
 package com.midichords.viewmodel
 
 import android.app.Application
-import android.hardware.usb.UsbDevice
+import android.content.Context
+import android.media.midi.MidiManager
+import android.hardware.usb.UsbManager
 import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.LiveData
@@ -9,6 +11,7 @@ import androidx.lifecycle.MutableLiveData
 import com.midichords.midi.ConnectionState
 import com.midichords.midi.MidiDeviceListener
 import com.midichords.midi.MidiDeviceManager
+import com.midichords.midi.MidiDeviceManagerImpl
 import com.midichords.midi.MidiEvent
 import com.midichords.midi.MidiEventListener
 
@@ -30,7 +33,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application), M
   val lastMidiEvent: LiveData<MidiEvent> = _lastMidiEvent
 
   private val midiDeviceManager = try {
-    MidiDeviceManager(application).also {
+    val midiManager = application.getSystemService(Context.MIDI_SERVICE) as? MidiManager
+    val usbManager = application.getSystemService(Context.USB_SERVICE) as UsbManager
+    MidiDeviceManagerImpl(application, midiManager, usbManager).also {
       it.registerListener(this)
       it.addMidiEventListener(this)
     }
@@ -92,11 +97,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application), M
 
   override fun onCleared() {
     super.onCleared()
-    try {
-      midiDeviceManager?.dispose()
-    } catch (e: Exception) {
-      Log.e(TAG, "Error disposing MIDI manager", e)
-    }
     midiDeviceManager?.unregisterListener(this)
     midiDeviceManager?.removeMidiEventListener(this)
   }

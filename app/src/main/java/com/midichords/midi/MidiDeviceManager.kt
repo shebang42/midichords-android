@@ -1,7 +1,5 @@
 package com.midichords.midi
 
-import android.hardware.usb.UsbDevice
-
 /**
  * Interface for managing MIDI device connections.
  */
@@ -19,29 +17,9 @@ interface MidiDeviceManager {
   fun unregisterListener(listener: MidiDeviceListener)
 
   /**
-   * Register a listener for MIDI events.
-   * @param listener The listener to register
+   * Refresh the list of available MIDI devices and attempt to connect to one if available.
    */
-  fun registerMidiEventListener(listener: MidiEventListener)
-
-  /**
-   * Unregister a previously registered MIDI event listener.
-   * @param listener The listener to unregister
-   */
-  fun unregisterMidiEventListener(listener: MidiEventListener)
-
-  /**
-   * Request permission to connect to a USB MIDI device.
-   * @param device The USB device to request permission for
-   */
-  fun requestPermission(device: UsbDevice)
-
-  /**
-   * Connect to a USB MIDI device.
-   * @param device The USB device to connect to
-   * @return true if connection was initiated successfully, false otherwise
-   */
-  fun connectToDevice(device: UsbDevice): Boolean
+  fun refreshAvailableDevices()
 
   /**
    * Disconnect from the currently connected MIDI device.
@@ -49,25 +27,14 @@ interface MidiDeviceManager {
   fun disconnect()
 
   /**
-   * Get the list of available USB MIDI devices.
-   * @return List of available USB MIDI devices
+   * Add a listener for MIDI events.
+   * @param listener The listener to add
    */
-  fun getAvailableDevices(): List<UsbDevice>
-
-  /**
-   * Get the currently connected MIDI device, if any.
-   * @return The connected device or null if not connected
-   */
-  fun getConnectedDevice(): UsbDevice?
-
-  /**
-   * Clean up resources when the manager is no longer needed.
-   */
-  fun dispose()
-
-  fun refreshAvailableDevices()
-
   fun addMidiEventListener(listener: MidiEventListener)
 
+  /**
+   * Remove a previously added MIDI event listener.
+   * @param listener The listener to remove
+   */
   fun removeMidiEventListener(listener: MidiEventListener)
-} 
+}
