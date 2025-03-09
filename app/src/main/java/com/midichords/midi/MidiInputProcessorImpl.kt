@@ -130,7 +130,8 @@ class MidiInputProcessorImpl : MidiInputProcessor {
       }
       
       // Method 2: Try to find a status byte and process from there
-      for (i in offset until offset + count) {
+      var i = offset
+      while (i < offset + count) {
         val b = data[i].toInt() and 0xFF
         if (b >= 0x80) { // Found a status byte
           val remaining = offset + count - i
@@ -151,10 +152,12 @@ class MidiInputProcessorImpl : MidiInputProcessor {
               }
               
               // Skip ahead by the length of this message
-              i += msgLength - 1 // -1 because the loop will increment i
+              i += msgLength // Skip the entire message
+              continue // Skip the increment at the end
             }
           }
         }
+        i++ // Move to the next byte
       }
       
       return latestEvent
