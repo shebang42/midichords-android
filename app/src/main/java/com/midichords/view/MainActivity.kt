@@ -55,6 +55,9 @@ class MainActivity : AppCompatActivity() {
     binding.toggleControlsButton.isSelected = controlsVisible
     binding.controlsContainer.visibility = if (controlsVisible) View.VISIBLE else View.GONE
     binding.debugContainer.visibility = View.GONE
+    
+    // Ensure the toggle button is always on top
+    binding.toggleControlsButton.bringToFront()
 
     // Move debug mode toggle to connection status long press
     binding.connectionStatus.setOnLongClickListener {
@@ -120,6 +123,9 @@ class MainActivity : AppCompatActivity() {
     
     // Update the toggle button's selected state
     binding.toggleControlsButton.isSelected = controlsVisible
+    
+    // Ensure the toggle button is always on top
+    binding.toggleControlsButton.bringToFront()
     
     // Show/hide the controls container with animation
     if (controlsVisible) {
