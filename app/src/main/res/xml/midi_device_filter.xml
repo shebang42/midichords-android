@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Standard USB MIDI device class -->
+    <usb-device class="1" subclass="3" />
+    
+    <!-- Common MIDI device vendors -->
+    <usb-device vendor-id="0x041E" /> <!-- Creative Labs -->
+    <usb-device vendor-id="0x0763" /> <!-- M-Audio -->
+    <usb-device vendor-id="0x1397" /> <!-- BEHRINGER -->
+    <usb-device vendor-id="0x07CF" /> <!-- Casio -->
+    <usb-device vendor-id="0x0582" /> <!-- Roland -->
+    <usb-device vendor-id="0x0944" /> <!-- Korg -->
+    <usb-device vendor-id="0x1410" /> <!-- Novation -->
+    <usb-device vendor-id="0x17CC" /> <!-- Native Instruments -->
+    <usb-device vendor-id="0x0499" /> <!-- Yamaha -->
+</resources> 

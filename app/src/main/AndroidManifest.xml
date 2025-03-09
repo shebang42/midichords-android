@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <!-- USB MIDI device feature -->
+    <!-- Required features -->
     <uses-feature android:name="android.hardware.usb.host" android:required="true" />
     <uses-feature android:name="android.software.midi" android:required="true" />
     
@@ -27,13 +27,13 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
 
-            <!-- USB device filter -->
+            <!-- USB device filter for MIDI devices -->
             <intent-filter>
                 <action android:name="android.hardware.usb.action.USB_DEVICE_ATTACHED" />
             </intent-filter>
             <meta-data
                 android:name="android.hardware.usb.action.USB_DEVICE_ATTACHED"
-                android:resource="@xml/device_filter" />
+                android:resource="@xml/midi_device_filter" />
         </activity>
     </application>
 </manifest> 

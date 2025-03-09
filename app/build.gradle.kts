@@ -59,6 +59,7 @@ object Versions {
   const val robolectric = "4.11.1"
   const val androidxTest = "1.5.0"
   const val espresso = "3.5.1"
+  const val androidxJUnit = "1.1.5"
 }
 
 dependencies {
@@ -85,10 +86,10 @@ dependencies {
   testImplementation("androidx.test:core:${Versions.androidxTest}")
   testImplementation("androidx.test:runner:${Versions.androidxTest}")
   testImplementation("androidx.test:rules:${Versions.androidxTest}")
-  testImplementation("androidx.test.ext:junit:${Versions.espresso}")
+  testImplementation("androidx.test.ext:junit:${Versions.androidxJUnit}")
   testImplementation("androidx.test.espresso:espresso-core:${Versions.espresso}")
   testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:${Versions.coroutines}")
   
-  androidTestImplementation("androidx.test.ext:junit:${Versions.espresso}")
+  androidTestImplementation("androidx.test.ext:junit:${Versions.androidxJUnit}")
   androidTestImplementation("androidx.test.espresso:espresso-core:${Versions.espresso}")
 } 

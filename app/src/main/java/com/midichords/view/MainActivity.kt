@@ -112,15 +112,28 @@ class MainActivity : AppCompatActivity() {
   private fun setupObservers() {
     viewModel.connectionState.observe(this) { state ->
       Log.d(TAG, "Connection state changed to: $state")
-      binding.connectionStatus.text = state.toString()
       
-      // If we're connected, update the UI
+      // Update the connection status text
+      val statusText = when (state) {
+        ConnectionState.CONNECTED -> "Status: Connected"
+        ConnectionState.CONNECTING -> "Status: Connecting..."
+        ConnectionState.DISCONNECTED -> "Status: Disconnected"
+        ConnectionState.ERROR -> "Status: Error"
+        else -> "Status: Unknown"
+      }
+      binding.connectionStatus.text = statusText
+      
+      // Update the UI elements based on connection state
       if (state == ConnectionState.CONNECTED) {
         binding.scanButton.isEnabled = false
         binding.deviceList.isEnabled = false
+        binding.btnConnect.isEnabled = false
+        binding.btnDisconnect.isEnabled = true
       } else {
         binding.scanButton.isEnabled = true
         binding.deviceList.isEnabled = true
+        binding.btnConnect.isEnabled = true
+        binding.btnDisconnect.isEnabled = false
       }
     }
 

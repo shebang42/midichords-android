@@ -54,22 +54,6 @@ enum class ChordType(
   SEVENTH_FLAT_5_SHARP_9("Seventh Flat 5 Sharp 9", "7b5#9", listOf(0, 4, 6, 10, 15)),
   SEVENTH_SHARP_5_SHARP_9("Seventh Sharp 5 Sharp 9", "7#5#9", listOf(0, 4, 8, 10, 15));
 
-  /**
-   * Get the formatted name of the chord type.
-   * @return The formatted name (e.g., "Major", "Minor 7th")
-   */
-  fun getFormattedName(): String {
-    return fullName
-  }
-
-  /**
-   * Get the symbol for this chord type.
-   * @return The chord symbol (e.g., "", "m", "7", "maj7")
-   */
-  fun getSymbol(): String {
-    return symbol
-  }
-
   companion object {
     /**
      * Find a chord type that matches the given intervals.

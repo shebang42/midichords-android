@@ -40,7 +40,7 @@ data class Chord(
    */
   fun getName(useFlats: Boolean = false): String {
     val rootName = root.getName(useFlats)
-    val typeSymbol = type.getSymbol()
+    val typeSymbol = type.symbol
     
     return if (bassNote != null && bassNote != root) {
       // Include the bass note for slash chords
@@ -57,7 +57,7 @@ data class Chord(
    */
   fun getFullName(useFlats: Boolean = false): String {
     val rootName = root.getName(useFlats)
-    val typeName = type.getFormattedName()
+    val typeName = type.fullName
     
     val inversionText = when (inversion) {
       0 -> ""
