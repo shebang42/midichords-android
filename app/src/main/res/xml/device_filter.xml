@@ -1,5 +1,29 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- USB MIDI devices -->
+    <!-- Standard USB MIDI devices (Audio class, MIDI streaming subclass) -->
     <usb-device class="1" subclass="3" />
+    
+    <!-- Communications class devices that might be MIDI -->
+    <usb-device class="2" subclass="6" />
+    
+    <!-- Vendor-specific devices - include common MIDI device vendors -->
+    <!-- Roland -->
+    <usb-device vendor-id="0x0582" />
+    <!-- Yamaha -->
+    <usb-device vendor-id="0x0499" />
+    <!-- Korg -->
+    <usb-device vendor-id="0x0944" />
+    <!-- Akai -->
+    <usb-device vendor-id="0x09e8" />
+    <!-- M-Audio -->
+    <usb-device vendor-id="0x0763" />
+    <!-- Native Instruments -->
+    <usb-device vendor-id="0x17cc" />
+    <!-- Novation -->
+    <usb-device vendor-id="0x1235" />
+    <!-- Behringer -->
+    <usb-device vendor-id="0x1397" />
+    
+    <!-- Include the specific device from the screenshot -->
+    <usb-device vendor-id="0x0BDA" product-id="0x813B" />
 </resources> 

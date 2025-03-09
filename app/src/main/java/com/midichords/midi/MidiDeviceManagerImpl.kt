@@ -69,11 +69,20 @@ class MidiDeviceManagerImpl(
             if (intent.getBooleanExtra(UsbManager.EXTRA_PERMISSION_GRANTED, false)) {
               device?.let {
                 Log.d(TAG, "USB permission granted for device: ${it.deviceName}")
+                notifyListeners(ConnectionState.CONNECTING, "Permission granted for ${it.deviceName}")
                 connectToUsbDevice(it)
+              } ?: run {
+                Log.e(TAG, "Permission granted but device is null")
+                notifyListeners(ConnectionState.ERROR, "Permission granted but device is null")
               }
             } else {
-              Log.d(TAG, "USB permission denied")
-              notifyListeners(ConnectionState.ERROR, "USB permission denied")
+              device?.let {
+                Log.e(TAG, "USB permission denied for device: ${it.deviceName}")
+                notifyListeners(ConnectionState.ERROR, "USB permission denied for ${it.deviceName}. Please reconnect the device and try again.")
+              } ?: run {
+                Log.e(TAG, "USB permission denied for unknown device")
+                notifyListeners(ConnectionState.ERROR, "USB permission denied. Please reconnect the device and try again.")
+              }
             }
           }
         }
@@ -89,6 +98,7 @@ class MidiDeviceManagerImpl(
             Log.d(TAG, "USB device attached: ${it.deviceName}")
             // Stop retrying if we were in retry mode
             stopRetrying()
+            notifyListeners(ConnectionState.CONNECTING, "USB device attached: ${it.deviceName}")
             requestUsbPermission(it)
           }
         }
@@ -103,6 +113,7 @@ class MidiDeviceManagerImpl(
           device?.let {
             Log.d(TAG, "USB device detached: ${it.deviceName}")
             disconnect()
+            notifyListeners(ConnectionState.DISCONNECTED, "USB device detached: ${it.deviceName}")
             // Start retrying to find new devices
             startRetrying()
           }
@@ -463,13 +474,39 @@ class MidiDeviceManagerImpl(
 
   private fun requestUsbPermission(device: UsbDevice) {
     Log.d(TAG, "Requesting permission for USB device: ${device.deviceName}")
-    val permissionIntent = PendingIntent.getBroadcast(
-      context,
-      0,
-      Intent(ACTION_USB_PERMISSION),
-      PendingIntent.FLAG_IMMUTABLE
-    )
-    usbManager.requestPermission(device, permissionIntent)
+    notifyListeners(ConnectionState.CONNECTING, "Requesting permission for USB device: ${device.deviceName}")
+    
+    try {
+      // Check if we already have permission
+      if (usbManager.hasPermission(device)) {
+        Log.d(TAG, "Already have permission for USB device: ${device.deviceName}")
+        connectToUsbDevice(device)
+        return
+      }
+      
+      // Create a PendingIntent for the permission request
+      val permissionIntent = PendingIntent.getBroadcast(
+        context,
+        device.deviceId, // Use device ID as request code to differentiate between devices
+        Intent(ACTION_USB_PERMISSION),
+        PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+      )
+      
+      // Request permission
+      usbManager.requestPermission(device, permissionIntent)
+      Log.d(TAG, "Permission request sent for device: ${device.deviceName}")
+      
+      // Set a timeout to check if permission was granted
+      handler.postDelayed({
+        if (!usbManager.hasPermission(device)) {
+          Log.d(TAG, "Permission request timed out for device: ${device.deviceName}")
+          notifyListeners(ConnectionState.ERROR, "USB permission request timed out. Please try again.")
+        }
+      }, 10000) // 10 second timeout
+    } catch (e: Exception) {
+      Log.e(TAG, "Error requesting USB permission", e)
+      notifyListeners(ConnectionState.ERROR, "Error requesting USB permission: ${e.message}")
+    }
   }
 
   override fun disconnect() {

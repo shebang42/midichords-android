@@ -52,7 +52,18 @@ class MainActivity : AppCompatActivity() {
         device?.let { usbDevice ->
           Log.d(TAG, "Selected device: $deviceName")
           displayDeviceDetails(usbDevice)
-          viewModel.connectToDevice(usbDevice)
+          
+          // Add a dialog to ask if the user wants to connect to the device
+          val builder = androidx.appcompat.app.AlertDialog.Builder(this)
+          builder.setTitle("Connect to MIDI Device")
+            .setMessage("Do you want to connect to this device?\n\n${usbDevice.deviceName}")
+            .setPositiveButton("Connect") { _, _ ->
+              viewModel.connectToDevice(usbDevice)
+            }
+            .setNegativeButton("Cancel") { dialog, _ ->
+              dialog.dismiss()
+            }
+            .show()
         }
       }
     }
