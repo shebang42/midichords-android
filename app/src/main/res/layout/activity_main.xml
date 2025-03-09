@@ -6,70 +6,13 @@
     android:layout_height="match_parent"
     tools:context=".view.MainActivity">
 
-    <!-- MIDI Event Container -->
+    <!-- Empty MIDI Event Container - Just for spacing at the top -->
     <androidx.constraintlayout.widget.ConstraintLayout
         android:id="@+id/midiEventContainer"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:padding="16dp"
-        app:layout_constraintTop_toTopOf="parent">
-
-        <TextView
-            android:id="@+id/connectionStatus"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="Status: Disconnected"
-            android:textSize="16sp"
-            android:textStyle="bold"
-            app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintTop_toTopOf="parent" />
-
-        <TextView
-            android:id="@+id/midiEventInfo"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="Event: None"
-            android:textSize="14sp"
-            app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintTop_toBottomOf="@id/connectionStatus" />
-
-        <TextView
-            android:id="@+id/midiNoteInfo"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="Note: None"
-            android:textSize="14sp"
-            app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintTop_toBottomOf="@id/midiEventInfo" />
-
-        <TextView
-            android:id="@+id/midiVelocityInfo"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="Velocity: 0"
-            android:textSize="14sp"
-            app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintTop_toBottomOf="@id/midiNoteInfo" />
-
-        <TextView
-            android:id="@+id/midiChannelInfo"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="Channel: 1"
-            android:textSize="14sp"
-            app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintTop_toBottomOf="@id/midiVelocityInfo" />
-
-        <TextView
-            android:id="@+id/activeNotesInfo"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="Active Notes: 0"
-            android:textSize="14sp"
-            app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintTop_toBottomOf="@id/midiChannelInfo" />
-
-    </androidx.constraintlayout.widget.ConstraintLayout>
+        android:padding="8dp"
+        app:layout_constraintTop_toTopOf="parent" />
 
     <!-- Chord Display View -->
     <com.midichords.view.ChordDisplayView
@@ -119,7 +62,7 @@
             android:id="@+id/debugTitle"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Debug Log"
+            android:text="Debug Information"
             android:textSize="16sp"
             android:textStyle="bold"
             app:layout_constraintStart_toStartOf="parent"
@@ -133,11 +76,69 @@
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintTop_toTopOf="parent" />
 
+        <!-- MIDI Event Info Section -->
+        <TextView
+            android:id="@+id/connectionStatus"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Status: Disconnected"
+            android:textSize="14sp"
+            android:textStyle="bold"
+            android:layout_marginTop="8dp"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@id/debugTitle" />
+
+        <TextView
+            android:id="@+id/midiEventInfo"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Event: None"
+            android:textSize="14sp"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@id/connectionStatus" />
+
+        <TextView
+            android:id="@+id/midiNoteInfo"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Note: None"
+            android:textSize="14sp"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@id/midiEventInfo" />
+
+        <TextView
+            android:id="@+id/midiVelocityInfo"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Velocity: 0"
+            android:textSize="14sp"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@id/midiNoteInfo" />
+
+        <TextView
+            android:id="@+id/midiChannelInfo"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Channel: 1"
+            android:textSize="14sp"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@id/midiVelocityInfo" />
+
+        <TextView
+            android:id="@+id/activeNotesInfo"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Active Notes: 0"
+            android:textSize="14sp"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@id/midiChannelInfo" />
+
+        <!-- Debug Log Section -->
         <ScrollView
             android:layout_width="match_parent"
             android:layout_height="150dp"
             android:layout_marginTop="8dp"
-            app:layout_constraintTop_toBottomOf="@id/debugTitle">
+            app:layout_constraintTop_toBottomOf="@id/activeNotesInfo">
 
             <TextView
                 android:id="@+id/debugLogText"

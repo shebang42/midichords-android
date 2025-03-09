@@ -118,7 +118,7 @@ class MainActivity : AppCompatActivity() {
     }
     
     // Set up no chord message
-    binding.chordDisplayView.setNoChordMessage("No Chord Detected")
+    binding.chordDisplayView.setNoChordMessage("-")
   }
   
   private fun toggleControlsVisibility() {
