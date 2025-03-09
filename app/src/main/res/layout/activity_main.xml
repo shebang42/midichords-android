@@ -20,7 +20,7 @@
         android:layout_height="wrap_content"
         android:orientation="vertical"
         android:layout_margin="16dp"
-        app:layout_constraintBottom_toTopOf="@id/chordDisplayContainer">
+        app:layout_constraintBottom_toTopOf="@id/midiEventContainer">
 
         <!-- Connection status indicator -->
         <TextView
@@ -54,6 +54,66 @@
             android:layout_marginTop="8dp"
             android:text="No device selected"
             android:textSize="14sp" />
+    </LinearLayout>
+
+    <!-- MIDI Event Display Container -->
+    <LinearLayout
+        android:id="@+id/midiEventContainer"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:layout_margin="16dp"
+        android:background="#F0F0F0"
+        android:padding="8dp"
+        app:layout_constraintBottom_toTopOf="@id/chordDisplayContainer">
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="MIDI Key Information"
+            android:textStyle="bold"
+            android:textSize="16sp"
+            android:gravity="center" />
+
+        <TextView
+            android:id="@+id/midiEventInfo"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="No MIDI events received"
+            android:textSize="14sp"
+            android:layout_marginTop="4dp" />
+
+        <TextView
+            android:id="@+id/midiNoteInfo"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Note: -"
+            android:textSize="14sp"
+            android:layout_marginTop="4dp" />
+
+        <TextView
+            android:id="@+id/midiVelocityInfo"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Velocity: -"
+            android:textSize="14sp"
+            android:layout_marginTop="4dp" />
+
+        <TextView
+            android:id="@+id/midiChannelInfo"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Channel: -"
+            android:textSize="14sp"
+            android:layout_marginTop="4dp" />
+
+        <TextView
+            android:id="@+id/activeNotesInfo"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Active Notes: 0"
+            android:textSize="14sp"
+            android:layout_marginTop="4dp" />
     </LinearLayout>
 
     <!-- Placeholder for chord display -->

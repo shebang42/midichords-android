@@ -14,6 +14,8 @@ import com.midichords.midi.MidiDeviceListener
 import com.midichords.midi.MidiDeviceManager
 import com.midichords.midi.MidiDeviceManagerImpl
 import com.midichords.midi.MidiEvent
+import com.midichords.midi.MidiEventListener
+import com.midichords.midi.MidiEventType
 import com.midichords.model.ActiveNote
 import com.midichords.model.BasicChordIdentifier
 import com.midichords.model.Chord
@@ -23,7 +25,7 @@ import com.midichords.model.NoteProcessor
 import com.midichords.model.NoteProcessorImpl
 import com.midichords.model.NoteStateListener
 
-class MainViewModel(application: Application) : AndroidViewModel(application), MidiDeviceListener, NoteStateListener, ChordListener {
+class MainViewModel(application: Application) : AndroidViewModel(application), MidiDeviceListener, NoteStateListener, ChordListener, MidiEventListener {
   companion object {
     private const val TAG = "MainViewModel"
   }
@@ -59,6 +61,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application), M
     MidiDeviceManagerImpl(application, midiManager, usbManager).also {
       it.registerListener(this)
       it.addMidiEventListener(noteProcessor)
+      it.addMidiEventListener(this)
     }
   } catch (e: Exception) {
     Log.e(TAG, "Failed to initialize MIDI device manager", e)
@@ -105,47 +108,50 @@ class MainViewModel(application: Application) : AndroidViewModel(application), M
    * Scan for USB devices directly using UsbManager
    */
   private fun scanForUsbDevices() {
-    try {
-      val deviceList = usbManager.deviceList
-      Log.d(TAG, "Found ${deviceList.size} USB devices via UsbManager")
+    val deviceList = usbManager.deviceList
+    Log.d(TAG, "Found ${deviceList.size} USB devices via UsbManager")
+    
+    // Log details about each device
+    deviceList.forEach { (name, device) ->
+      Log.d(TAG, "USB Device: $name")
+      Log.d(TAG, "  Device ID: ${device.deviceId}")
+      Log.d(TAG, "  Product ID: ${device.productId}")
+      Log.d(TAG, "  Vendor ID: ${device.vendorId}")
       
-      // Update the available devices LiveData
-      _availableDevices.value = deviceList.values.toList()
-      
-      // Log details about each device
-      deviceList.forEach { (name, device) ->
-        Log.d(TAG, "USB Device: $name")
-        Log.d(TAG, "  Device ID: ${device.deviceId}")
-        Log.d(TAG, "  Product ID: ${device.productId}")
-        Log.d(TAG, "  Vendor ID: ${device.vendorId}")
-        
-        // Check if this device has a MIDI interface
-        var hasMidiInterface = false
-        for (i in 0 until device.interfaceCount) {
-          val usbInterface = device.getInterface(i)
-          if (usbInterface.interfaceClass == 1 && usbInterface.interfaceSubclass == 3) {
-            hasMidiInterface = true
-            Log.d(TAG, "  Interface $i is a MIDI interface")
-          }
+      // Check if this device has a MIDI interface
+      var hasMidiInterface = false
+      for (i in 0 until device.interfaceCount) {
+        val usbInterface = device.getInterface(i)
+        if (usbInterface.interfaceClass == 1 && usbInterface.interfaceSubclass == 3) {
+          hasMidiInterface = true
+          Log.d(TAG, "  Interface $i is a standard MIDI interface (Class 1, Subclass 3)")
         }
-        
-        if (hasMidiInterface) {
-          Log.d(TAG, "  This device has a MIDI interface")
-        } else {
-          Log.d(TAG, "  This device does not have a MIDI interface")
+        // Check for other common MIDI interface patterns
+        else if (usbInterface.interfaceClass == 2 && usbInterface.interfaceSubclass == 6) {
+          // Some MIDI devices use Communications class (2) with subclass 6
+          hasMidiInterface = true
+          Log.d(TAG, "  Interface $i is likely a MIDI interface (Class 2, Subclass 6)")
+        }
+        else if (usbInterface.interfaceClass == 255) {
+          // Vendor-specific class, might be MIDI
+          Log.d(TAG, "  Interface $i is a vendor-specific interface (Class 255)")
+          // We'll consider it a potential MIDI interface
+          hasMidiInterface = true
         }
       }
-    } catch (e: Exception) {
-      Log.e(TAG, "Error scanning for USB devices", e)
+      
+      if (hasMidiInterface) {
+        Log.d(TAG, "  This device has a potential MIDI interface")
+      }
     }
+    
+    // Update the available devices
+    _availableDevices.value = deviceList.values.toList()
   }
 
   fun connectToDevice(device: UsbDevice) {
     try {
-      midiDeviceManager?.connectToUsbDevice(device) ?: run {
-        Log.e(TAG, "Cannot connect - MIDI manager not initialized")
-        _connectionMessage.value = "MIDI system not available"
-      }
+      midiDeviceManager?.connectToUsbDevice(device)
     } catch (e: Exception) {
       Log.e(TAG, "Error connecting to device", e)
       _connectionState.value = ConnectionState.ERROR
@@ -191,11 +197,31 @@ class MainViewModel(application: Application) : AndroidViewModel(application), M
     Log.d(TAG, "No chord identified")
     _currentChord.postValue(null)
   }
+  
+  // MidiEventListener implementation
+  override fun onMidiEvent(event: MidiEvent) {
+    // Only update UI for note events to avoid flooding the UI with other events
+    if (event.type == MidiEventType.NOTE_ON || event.type == MidiEventType.NOTE_OFF) {
+      Log.d(TAG, "MIDI event: ${event.type}, note: ${event.data1}, velocity: ${event.data2}, channel: ${event.channel}")
+      _lastMidiEvent.postValue(event)
+    }
+  }
+  
+  /**
+   * Get a human-readable note name from a MIDI note number
+   */
+  fun getNoteNameFromNumber(noteNumber: Int): String {
+    val noteNames = arrayOf("C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B")
+    val octave = (noteNumber / 12) - 1
+    val note = noteNumber % 12
+    return "${noteNames[note]}$octave"
+  }
 
   override fun onCleared() {
     super.onCleared()
     midiDeviceManager?.unregisterListener(this)
     midiDeviceManager?.removeMidiEventListener(noteProcessor)
+    midiDeviceManager?.removeMidiEventListener(this)
     noteProcessor.unregisterNoteListener(this)
     
     if (chordIdentifier is NoteStateListener) {

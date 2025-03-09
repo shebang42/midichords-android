@@ -10,6 +10,7 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.ViewModelProvider
 import com.midichords.databinding.ActivityMainBinding
 import com.midichords.midi.ConnectionState
+import com.midichords.midi.MidiEventType
 import com.midichords.viewmodel.MainViewModel
 
 class MainActivity : AppCompatActivity() {
@@ -94,6 +95,44 @@ class MainActivity : AppCompatActivity() {
     viewModel.availableDevices.observe(this) { devices ->
       Log.d(TAG, "Available devices: ${devices.size}")
       updateDeviceList(devices)
+    }
+    
+    // Observe MIDI events
+    viewModel.lastMidiEvent.observe(this) { event ->
+      // Update the MIDI event display
+      val eventTypeStr = when (event.type) {
+        MidiEventType.NOTE_ON -> "Note On"
+        MidiEventType.NOTE_OFF -> "Note Off"
+        MidiEventType.CONTROL_CHANGE -> "Control Change"
+        else -> event.type.toString()
+      }
+      
+      binding.midiEventInfo.text = "Event: $eventTypeStr"
+      
+      // For note events, show the note name
+      if (event.type == MidiEventType.NOTE_ON || event.type == MidiEventType.NOTE_OFF) {
+        val noteName = viewModel.getNoteNameFromNumber(event.data1)
+        binding.midiNoteInfo.text = "Note: $noteName (${event.data1})"
+        binding.midiVelocityInfo.text = "Velocity: ${event.data2}"
+      }
+      
+      binding.midiChannelInfo.text = "Channel: ${event.channel + 1}" // Display 1-based channel number
+    }
+    
+    // Observe active notes
+    viewModel.activeNotes.observe(this) { notes ->
+      binding.activeNotesInfo.text = "Active Notes: ${notes.size}"
+      
+      // If there are active notes, show the most recent one
+      if (notes.isNotEmpty()) {
+        val mostRecentNote = notes.maxByOrNull { it.timestamp }
+        mostRecentNote?.let {
+          val noteName = it.getNoteName()
+          binding.midiNoteInfo.text = "Note: $noteName (${it.noteNumber})"
+          binding.midiVelocityInfo.text = "Velocity: ${it.velocity}"
+          binding.midiChannelInfo.text = "Channel: ${it.channel + 1}" // Display 1-based channel number
+        }
+      }
     }
   }
   
