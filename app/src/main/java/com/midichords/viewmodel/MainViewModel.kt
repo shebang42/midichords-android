@@ -93,7 +93,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application), M
   fun refreshAvailableDevices() {
     try {
       // Get USB devices directly from UsbManager
-      val usbManager = application.getSystemService(Context.USB_SERVICE) as UsbManager
+      val usbManager = getApplication<Application>().getSystemService(Context.USB_SERVICE) as UsbManager
       val allDevices = usbManager.deviceList.values.toList()
       
       // Filter out 0xBDA devices
@@ -138,7 +138,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application), M
     
     try {
       Log.d(TAG, "Connecting to device: ${device.deviceName} (VID: 0x${device.vendorId.toString(16).uppercase()}, PID: 0x${device.productId.toString(16).uppercase()})")
-      midiDeviceManager.connectToUsbDevice(device)
+      midiDeviceManager?.connectToUsbDevice(device)
     } catch (e: Exception) {
       Log.e(TAG, "Error connecting to device", e)
       _connectionState.value = ConnectionState.ERROR
