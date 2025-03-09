@@ -51,7 +51,7 @@ class ChordDisplayView @JvmOverloads constructor(
   
   private val altNamePaint = Paint().apply {
     color = Color.parseColor("#555555")
-    textSize = 32f
+    textSize = 96f  // Increased from 32f to 96f (3x larger)
     typeface = Typeface.create(Typeface.DEFAULT, Typeface.ITALIC)
     textAlign = Paint.Align.CENTER
     isAntiAlias = true
@@ -95,7 +95,7 @@ class ChordDisplayView @JvmOverloads constructor(
     if (currentChord != null) {
       // Calculate vertical positions based on how many elements to display
       val hasAlternatives = getFilteredAlternativeNames().isNotEmpty() && showAlternatives
-      val mainChordY = if (hasAlternatives) height * 0.35f else height / 2f - 10f
+      val mainChordY = if (hasAlternatives) height * 0.25f else height / 2f - 10f
       
       // Draw the main chord name
       textPaint.textSize = 128f
@@ -119,7 +119,7 @@ class ChordDisplayView @JvmOverloads constructor(
       // Draw alternative names if enabled
       if (hasAlternatives) {
         val altNames = getFilteredAlternativeNames()
-        val startY = mainChordY + 120f
+        val startY = mainChordY + 150f  // Increased from 120f
         
         // Display jazz name if available
         val jazzName = getJazzName()
@@ -130,14 +130,16 @@ class ChordDisplayView @JvmOverloads constructor(
         // Limit to 3 alternative names
         val displayNames = altNames.take(3)
         
-        // Display "Also known as:" text
+        // Display "Also known as:" text with larger text
         altNamePaint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
+        altNamePaint.textSize = 64f  // Slightly smaller than alternative names
         canvas.drawText("Also known as:", centerX, startY, altNamePaint)
         
-        // Draw alternative names
+        // Reset to original size for alternative names
+        altNamePaint.textSize = 96f
         altNamePaint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.ITALIC)
         displayNames.forEachIndexed { index, name ->
-          val y = startY + 40f + (index * 40f)
+          val y = startY + 110f + (index * 110f)
           canvas.drawText(name, centerX, y, altNamePaint)
         }
       }
