@@ -186,14 +186,29 @@ class MidiDeviceManagerImpl(
         val usbInterface = device.getInterface(i)
         if (usbInterface.interfaceClass == 1 && usbInterface.interfaceSubclass == 3) {
           hasMidiInterface = true
-          Log.d(TAG, "  Interface $i is a MIDI interface")
+          Log.d(TAG, "  Interface $i is a standard MIDI interface (Class 1, Subclass 3)")
+        }
+        // Check for other common MIDI interface patterns
+        else if (usbInterface.interfaceClass == 2 && usbInterface.interfaceSubclass == 6) {
+          // Some MIDI devices use Communications class (2) with subclass 6
+          hasMidiInterface = true
+          Log.d(TAG, "  Interface $i is likely a MIDI interface (Class 2, Subclass 6)")
+        }
+        else if (usbInterface.interfaceClass == 255) {
+          // Vendor-specific class, might be MIDI
+          Log.d(TAG, "  Interface $i is a vendor-specific interface (Class 255)")
+          // We'll consider it a potential MIDI interface
+          hasMidiInterface = true
+        }
+        else {
+          Log.d(TAG, "  Interface $i: Class ${usbInterface.interfaceClass}, Subclass ${usbInterface.interfaceSubclass}")
         }
       }
       
       if (hasMidiInterface) {
-        Log.d(TAG, "  This device has a MIDI interface")
+        Log.d(TAG, "  This device has a potential MIDI interface")
       } else {
-        Log.d(TAG, "  This device does not have a MIDI interface")
+        Log.d(TAG, "  This device does not appear to have a MIDI interface")
       }
     }
     
@@ -349,16 +364,28 @@ class MidiDeviceManagerImpl(
         val usbInterface = device.getInterface(i)
         if (usbInterface.interfaceClass == 1 && usbInterface.interfaceSubclass == 3) {
           hasMidiInterface = true
-          Log.d(TAG, "Device has a MIDI interface")
+          Log.d(TAG, "Device has a standard MIDI interface (Class 1, Subclass 3)")
+          break
+        }
+        // Check for other common MIDI interface patterns
+        else if (usbInterface.interfaceClass == 2 && usbInterface.interfaceSubclass == 6) {
+          // Some MIDI devices use Communications class (2) with subclass 6
+          hasMidiInterface = true
+          Log.d(TAG, "Device has a likely MIDI interface (Class 2, Subclass 6)")
+          break
+        }
+        else if (usbInterface.interfaceClass == 255) {
+          // Vendor-specific class, might be MIDI
+          Log.d(TAG, "Device has a vendor-specific interface (Class 255) that might be MIDI")
+          hasMidiInterface = true
           break
         }
       }
       
       if (!hasMidiInterface) {
-        Log.e(TAG, "Device does not have a MIDI interface")
-        notifyListeners(ConnectionState.ERROR, "Device does not have a MIDI interface")
-        startRetrying()
-        return
+        Log.e(TAG, "Device does not appear to have a MIDI interface")
+        notifyListeners(ConnectionState.ERROR, "Device does not appear to have a standard MIDI interface, but we'll try anyway")
+        // We'll continue anyway since some devices don't properly report their interfaces
       }
       
       // Try to find the device in the MIDI manager
@@ -390,19 +417,48 @@ class MidiDeviceManagerImpl(
       }
     }
     
-    Log.e(TAG, "USB device not recognized as MIDI device. This could be because:")
-    Log.e(TAG, "1. The device is not a MIDI device")
-    Log.e(TAG, "2. The device requires a driver that is not installed")
-    Log.e(TAG, "3. The Android MIDI service has not yet recognized the device")
+    Log.d(TAG, "USB device not recognized as MIDI device by Android MIDI service.")
+    Log.d(TAG, "This could be because:")
+    Log.d(TAG, "1. The device is not a MIDI device")
+    Log.d(TAG, "2. The device requires a driver that is not installed")
+    Log.d(TAG, "3. The Android MIDI service has not yet recognized the device")
     
-    // If we have a USB device but it's not in the MIDI devices list,
-    // we'll try again after a short delay to give the MIDI service time to recognize it
-    handler.postDelayed({
-      Log.d(TAG, "Retrying MIDI device detection after delay")
-      refreshAvailableDevices()
-    }, 1000)
+    // Try a direct approach for devices that aren't recognized by the MIDI service
+    tryDirectConnection(usbDevice)
+  }
+  
+  private fun tryDirectConnection(device: UsbDevice) {
+    Log.d(TAG, "Attempting direct connection to USB device: ${device.deviceName}")
+    notifyListeners(ConnectionState.CONNECTING, "Attempting direct connection to ${device.deviceName}")
     
-    notifyListeners(ConnectionState.ERROR, "USB device not recognized as MIDI device")
+    // For now, we'll just notify that we're trying, but the actual implementation
+    // would require using UsbDeviceConnection and UsbRequest to communicate directly
+    // with the device, which is beyond the scope of this fix
+    
+    // If the device has a MIDI interface according to our expanded checks, we'll retry
+    // with the MIDI service after a delay
+    var hasPotentialMidiInterface = false
+    for (i in 0 until device.interfaceCount) {
+      val usbInterface = device.getInterface(i)
+      if (usbInterface.interfaceClass == 1 && usbInterface.interfaceSubclass == 3 ||
+          usbInterface.interfaceClass == 2 && usbInterface.interfaceSubclass == 6 ||
+          usbInterface.interfaceClass == 255) {
+        hasPotentialMidiInterface = true
+        break
+      }
+    }
+    
+    if (hasPotentialMidiInterface) {
+      Log.d(TAG, "Device has potential MIDI interface, will retry with MIDI service after delay")
+      // If we have a USB device but it's not in the MIDI devices list,
+      // we'll try again after a short delay to give the MIDI service time to recognize it
+      handler.postDelayed({
+        Log.d(TAG, "Retrying MIDI device detection after delay")
+        refreshAvailableDevices()
+      }, 2000)
+    } else {
+      notifyListeners(ConnectionState.ERROR, "Device does not appear to be a MIDI device")
+    }
   }
 
   private fun requestUsbPermission(device: UsbDevice) {

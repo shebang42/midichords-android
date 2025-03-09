@@ -157,28 +157,41 @@ class MainActivity : AppCompatActivity() {
     val details = StringBuilder()
     details.append("Name: ${device.deviceName}\n")
     details.append("ID: ${device.deviceId}\n")
-    details.append("Vendor ID: ${device.vendorId}\n")
-    details.append("Product ID: ${device.productId}\n")
+    details.append("Vendor ID: ${device.vendorId} (0x${device.vendorId.toString(16).uppercase()})\n")
+    details.append("Product ID: ${device.productId} (0x${device.productId.toString(16).uppercase()})\n")
     details.append("Class: ${device.deviceClass}\n")
     details.append("Subclass: ${device.deviceSubclass}\n")
     details.append("Interfaces: ${device.interfaceCount}\n")
     
     // Check if this device has a MIDI interface
     var hasMidiInterface = false
+    var potentialMidiInterface = false
+    
     for (i in 0 until device.interfaceCount) {
       val usbInterface = device.getInterface(i)
-      if (usbInterface.interfaceClass == 1 && usbInterface.interfaceSubclass == 3) {
+      val interfaceClass = usbInterface.interfaceClass
+      val interfaceSubclass = usbInterface.interfaceSubclass
+      
+      if (interfaceClass == 1 && interfaceSubclass == 3) {
         hasMidiInterface = true
-        details.append("Interface $i: MIDI\n")
+        details.append("Interface $i: MIDI (Class 1, Subclass 3)\n")
+      } else if (interfaceClass == 2 && interfaceSubclass == 6) {
+        potentialMidiInterface = true
+        details.append("Interface $i: Potential MIDI (Class 2, Subclass 6)\n")
+      } else if (interfaceClass == 255) {
+        potentialMidiInterface = true
+        details.append("Interface $i: Vendor-specific (Class 255, Subclass $interfaceSubclass)\n")
       } else {
-        details.append("Interface $i: Class ${usbInterface.interfaceClass}, Subclass ${usbInterface.interfaceSubclass}\n")
+        details.append("Interface $i: Class $interfaceClass, Subclass $interfaceSubclass\n")
       }
     }
     
     if (hasMidiInterface) {
-      details.append("This device has a MIDI interface")
+      details.append("This device has a standard MIDI interface")
+    } else if (potentialMidiInterface) {
+      details.append("This device has a potential MIDI interface (non-standard)")
     } else {
-      details.append("This device does NOT have a MIDI interface")
+      details.append("This device does NOT have a standard MIDI interface")
     }
     
     binding.deviceDetails.text = details.toString()
