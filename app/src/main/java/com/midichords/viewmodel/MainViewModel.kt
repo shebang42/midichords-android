@@ -168,6 +168,48 @@ class MainViewModel(application: Application) : AndroidViewModel(application), M
       _connectionMessage.value = "Error disconnecting: ${e.message}"
     }
   }
+  
+  /**
+   * Send a test MIDI message to verify the MIDI event processing pipeline
+   */
+  fun sendTestMidiMessage() {
+    Log.d(TAG, "Sending test MIDI message")
+    
+    // Create a test Note On event
+    val testEvent = MidiEvent(
+      type = MidiEventType.NOTE_ON,
+      channel = 0,
+      data1 = 60, // Middle C
+      data2 = 100 // Velocity
+    )
+    
+    // Process the event directly
+    Log.d(TAG, "Processing test MIDI event: ${testEvent.type}, note: ${testEvent.data1}, velocity: ${testEvent.data2}")
+    
+    // Update the UI
+    _lastMidiEvent.postValue(testEvent)
+    
+    // Send to the note processor
+    noteProcessor.onMidiEvent(testEvent)
+    
+    // After 500ms, send a Note Off event
+    android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+      val noteOffEvent = MidiEvent(
+        type = MidiEventType.NOTE_OFF,
+        channel = 0,
+        data1 = 60, // Middle C
+        data2 = 0 // Velocity
+      )
+      
+      Log.d(TAG, "Processing test MIDI Note Off event")
+      
+      // Update the UI
+      _lastMidiEvent.postValue(noteOffEvent)
+      
+      // Send to the note processor
+      noteProcessor.onMidiEvent(noteOffEvent)
+    }, 500)
+  }
 
   // NoteStateListener implementation
   override fun onNoteActivated(note: ActiveNote) {

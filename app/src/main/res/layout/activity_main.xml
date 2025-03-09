@@ -75,6 +75,15 @@
             android:textSize="16sp"
             android:gravity="center" />
 
+        <!-- Test MIDI Button -->
+        <Button
+            android:id="@+id/testMidiButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Test MIDI (Send C4 Note)"
+            android:layout_marginTop="4dp"
+            android:layout_marginBottom="4dp" />
+
         <TextView
             android:id="@+id/midiEventInfo"
             android:layout_width="match_parent"

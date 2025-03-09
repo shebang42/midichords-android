@@ -1,5 +1,6 @@
 package com.midichords.midi
 
+import android.media.midi.MidiInputPort
 import android.media.midi.MidiReceiver
 import android.util.Log
 import java.util.concurrent.CopyOnWriteArrayList
@@ -14,24 +15,45 @@ class MidiInputProcessorImpl : MidiInputProcessor {
 
   private val listeners = CopyOnWriteArrayList<MidiEventListener>()
   private var lastStatusByte: Byte? = null
+  private var currentInputPort: MidiInputPort? = null
 
   private val midiReceiver = object : MidiReceiver() {
     override fun onSend(data: ByteArray, offset: Int, count: Int, timestamp: Long) {
+      Log.d(TAG, "onSend received: ${count} bytes, offset: ${offset}, timestamp: ${timestamp}")
+      // Log the raw bytes for debugging
+      val hexData = data.slice(offset until offset + count).joinToString(" ") { 
+        "0x${it.toInt().and(0xFF).toString(16).padStart(2, '0')}" 
+      }
+      Log.d(TAG, "Raw MIDI data: $hexData")
+      
       val event = processMidiData(data, offset, count, timestamp)
-      event?.let { notifyListeners(it) }
+      if (event != null) {
+        Log.d(TAG, "Processed MIDI event: ${event.type}, channel: ${event.channel}, data1: ${event.data1}, data2: ${event.data2}")
+        notifyListeners(event)
+      } else {
+        Log.w(TAG, "Failed to process MIDI data")
+      }
     }
   }
 
   override fun processMidiData(data: ByteArray, offset: Int, length: Int, timestamp: Long): MidiEvent? {
-    if (length < 1) return null
+    if (length < 1) {
+      Log.w(TAG, "processMidiData: Data length too short (${length})")
+      return null
+    }
 
     try {
       var currentOffset = offset
       val statusByte = data[currentOffset]
+      Log.d(TAG, "Processing status byte: 0x${statusByte.toInt().and(0xFF).toString(16)}")
 
       // If this is a data byte and we have a running status, use the last status byte
       val actualStatusByte = if (statusByte < 0x80.toByte()) {
-        lastStatusByte ?: return null // No running status available
+        Log.d(TAG, "Using running status: ${lastStatusByte?.let { "0x${it.toInt().and(0xFF).toString(16)}" } ?: "none"}")
+        lastStatusByte ?: run {
+          Log.w(TAG, "No running status available for data byte")
+          return null // No running status available
+        }
       } else {
         currentOffset++ // Move past status byte
         statusByte.also { lastStatusByte = it }
@@ -39,44 +61,68 @@ class MidiInputProcessorImpl : MidiInputProcessor {
 
       // Get the remaining length after processing the status byte
       val remainingLength = length - (currentOffset - offset)
-      if (remainingLength < 1) return null
+      if (remainingLength < 1) {
+        Log.w(TAG, "Insufficient data after status byte")
+        return null
+      }
 
       val command = (actualStatusByte.toInt() and 0xF0)
       val channel = (actualStatusByte.toInt() and 0x0F)
+      Log.d(TAG, "Command: 0x${command.toString(16)}, Channel: $channel")
 
       return when (command) {
         0x80 -> { // Note Off
-          if (remainingLength < 2) return null
+          if (remainingLength < 2) {
+            Log.w(TAG, "Insufficient data for Note Off message")
+            return null
+          }
+          val note = data[currentOffset].toInt() and 0xFF
+          val velocity = data[currentOffset + 1].toInt() and 0xFF
+          Log.d(TAG, "Note Off: note=$note, velocity=$velocity")
           MidiEvent(
             type = MidiEventType.NOTE_OFF,
             channel = channel,
-            data1 = data[currentOffset].toInt() and 0xFF,
-            data2 = data[currentOffset + 1].toInt() and 0xFF,
+            data1 = note,
+            data2 = velocity,
             timestamp = timestamp
           )
         }
         0x90 -> { // Note On
-          if (remainingLength < 2) return null
+          if (remainingLength < 2) {
+            Log.w(TAG, "Insufficient data for Note On message")
+            return null
+          }
+          val note = data[currentOffset].toInt() and 0xFF
           val velocity = data[currentOffset + 1].toInt() and 0xFF
+          Log.d(TAG, "Note On: note=$note, velocity=$velocity")
           MidiEvent(
             type = MidiEventType.NOTE_ON,
             channel = channel,
-            data1 = data[currentOffset].toInt() and 0xFF,
+            data1 = note,
             data2 = velocity,
             timestamp = timestamp
           )
         }
         0xB0 -> { // Control Change
-          if (remainingLength < 2) return null
+          if (remainingLength < 2) {
+            Log.w(TAG, "Insufficient data for Control Change message")
+            return null
+          }
+          val controller = data[currentOffset].toInt() and 0xFF
+          val value = data[currentOffset + 1].toInt() and 0xFF
+          Log.d(TAG, "Control Change: controller=$controller, value=$value")
           MidiEvent(
             type = MidiEventType.CONTROL_CHANGE,
             channel = channel,
-            data1 = data[currentOffset].toInt() and 0xFF,
-            data2 = data[currentOffset + 1].toInt() and 0xFF,
+            data1 = controller,
+            data2 = value,
             timestamp = timestamp
           )
         }
-        else -> null // Unsupported command
+        else -> {
+          Log.w(TAG, "Unsupported command: 0x${command.toString(16)}")
+          null // Unsupported command
+        }
       }
     } catch (e: Exception) {
       Log.e(TAG, "Error processing MIDI data", e)
@@ -86,20 +132,28 @@ class MidiInputProcessorImpl : MidiInputProcessor {
 
   override fun getReceiver(): MidiReceiver = midiReceiver
 
+  override fun setInputPort(inputPort: MidiInputPort) {
+    currentInputPort = inputPort
+    Log.d(TAG, "MIDI input port set: $inputPort")
+  }
+
   override fun registerListener(listener: MidiEventListener) {
     listeners.add(listener)
+    Log.d(TAG, "Registered MIDI event listener: $listener, total listeners: ${listeners.size}")
   }
 
   override fun unregisterListener(listener: MidiEventListener) {
     listeners.remove(listener)
+    Log.d(TAG, "Unregistered MIDI event listener: $listener, remaining listeners: ${listeners.size}")
   }
 
   private fun notifyListeners(event: MidiEvent) {
+    Log.d(TAG, "Notifying ${listeners.size} listeners of MIDI event: ${event.type}")
     listeners.forEach { listener ->
       try {
         listener.onMidiEvent(event)
       } catch (e: Exception) {
-        Log.e(TAG, "Error notifying listener", e)
+        Log.e(TAG, "Error notifying listener: $listener", e)
       }
     }
   }

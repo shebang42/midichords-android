@@ -522,27 +522,67 @@ class MidiDeviceManagerImpl(
       directUsbConnection = connection
       directUsbInterface = usbInterface
       
-      // At this point, we have a connection and claimed interface
-      // For a real implementation, you would need to:
-      // 1. Set up endpoints for communication
-      // 2. Create a thread to read from the device
-      // 3. Implement MIDI message parsing
+      // Find an input endpoint (direction IN)
+      var inputEndpoint: android.hardware.usb.UsbEndpoint? = null
+      for (i in 0 until usbInterface.endpointCount) {
+        val endpoint = usbInterface.getEndpoint(i)
+        Log.d(TAG, "Endpoint $i: address=0x${endpoint.address.toString(16)}, " +
+                   "attributes=0x${endpoint.attributes.toString(16)}, " +
+                   "direction=${if (endpoint.direction == android.hardware.usb.UsbConstants.USB_DIR_IN) "IN" else "OUT"}")
+        
+        if (endpoint.direction == android.hardware.usb.UsbConstants.USB_DIR_IN) {
+          inputEndpoint = endpoint
+          Log.d(TAG, "Found input endpoint at index $i")
+          break
+        }
+      }
       
-      // For now, we'll just notify that we're connected
+      if (inputEndpoint == null) {
+        Log.e(TAG, "No input endpoint found on interface")
+        connection.releaseInterface(usbInterface)
+        connection.close()
+        directUsbConnection = null
+        directUsbInterface = null
+        notifyListeners(ConnectionState.ERROR, "No input endpoint found on device")
+        return
+      }
+      
+      // Notify that we're connected
       notifyListeners(ConnectionState.CONNECTED, "Connected directly to ${device.deviceName}")
       
-      // Start a simple thread to keep the connection alive
+      // Start a thread to read from the device
       val thread = Thread {
         try {
-          // Keep the connection open until the app disconnects
-          while (true) {
-            Thread.sleep(1000)
-            if (Thread.interrupted()) {
-              break
+          val buffer = ByteArray(64) // Buffer for reading data
+          
+          Log.d(TAG, "Starting USB read loop")
+          while (!Thread.interrupted()) {
+            // Read from the endpoint
+            val bytesRead = connection.bulkTransfer(inputEndpoint, buffer, buffer.size, 100)
+            
+            if (bytesRead > 0) {
+              Log.d(TAG, "Read $bytesRead bytes from USB device")
+              
+              // Process the MIDI data
+              val timestamp = System.nanoTime()
+              midiInputProcessor.processMidiData(buffer, 0, bytesRead, timestamp)?.let { event ->
+                // Log the event
+                Log.d(TAG, "Processed MIDI event from direct USB: ${event.type}, " +
+                           "channel: ${event.channel}, data1: ${event.data1}, data2: ${event.data2}")
+              }
             }
+            
+            // Small delay to avoid hammering the CPU
+            Thread.sleep(5)
           }
-        } catch (e: InterruptedException) {
-          // Thread was interrupted, clean up
+        } catch (e: Exception) {
+          if (e is InterruptedException) {
+            // Thread was interrupted, this is expected during cleanup
+            Log.d(TAG, "USB read thread interrupted")
+          } else {
+            Log.e(TAG, "Error reading from USB device", e)
+            notifyListeners(ConnectionState.ERROR, "Error reading from USB device: ${e.message}")
+          }
         }
       }
       

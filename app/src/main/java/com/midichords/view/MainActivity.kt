@@ -44,6 +44,13 @@ class MainActivity : AppCompatActivity() {
       Log.d(TAG, "Scan button clicked")
       scanForUsbDevices()
     }
+    
+    // Set up test MIDI button
+    binding.testMidiButton.setOnClickListener {
+      Log.d(TAG, "Test MIDI button clicked")
+      viewModel.sendTestMidiMessage()
+      Toast.makeText(this, "Sending test MIDI message (C4 note)", Toast.LENGTH_SHORT).show()
+    }
 
     // Set up device list click listener
     binding.deviceList.setOnItemClickListener { _, _, position, _ ->
