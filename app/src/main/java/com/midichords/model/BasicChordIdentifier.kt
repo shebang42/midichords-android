@@ -44,19 +44,17 @@ class BasicChordIdentifier : ChordIdentifier, NoteStateListener {
     // Not used for chord identification
   }
 
-  @JvmName("identifyChordFromNotes")
-  override fun identifyChord(notes: List<ActiveNote>): Chord? {
+  override fun identifyChordFromNotes(notes: List<ActiveNote>): Chord? {
     if (notes.size < MIN_NOTES_FOR_CHORD) {
       return null
     }
 
     // Extract pitch classes from notes
     val pitchClasses = notes.map { Note.fromMidiNote(it.noteNumber).pitchClass }.distinct()
-    return identifyChord(pitchClasses)
+    return identifyChordFromPitchClasses(pitchClasses)
   }
 
-  @JvmName("identifyChordFromPitchClasses")
-  override fun identifyChord(pitchClasses: List<PitchClass>): Chord? {
+  override fun identifyChordFromPitchClasses(pitchClasses: List<PitchClass>): Chord? {
     if (pitchClasses.size < MIN_NOTES_FOR_CHORD) {
       return null
     }
@@ -75,7 +73,7 @@ class BasicChordIdentifier : ChordIdentifier, NoteStateListener {
       val bassPC = Note.fromMidiNote(bassNote.noteNumber).pitchClass
       if (!pitchClasses.contains(bassPC)) {
         // Bass note is not in the chord, might be a slash chord
-        val chordWithoutBass = identifyChord(pitchClasses)
+        val chordWithoutBass = identifyChordFromPitchClasses(pitchClasses)
         if (chordWithoutBass != null) {
           return Chord(
             chordWithoutBass.root,
@@ -157,20 +155,5 @@ class BasicChordIdentifier : ChordIdentifier, NoteStateListener {
   private fun notifyNoChordIdentified(notes: List<ActiveNote>) {
     Log.d(TAG, "No chord identified from ${notes.size} notes")
     listeners.forEach { it.onNoChordIdentified(notes) }
-  }
-  
-  // Helper method to avoid recursive calls after adding @JvmName annotations
-  private fun identifyChordFromNotes(notes: List<ActiveNote>): Chord? {
-    if (notes.size < MIN_NOTES_FOR_CHORD) {
-      return null
-    }
-
-    // Extract pitch classes from notes
-    val pitchClasses = notes.map { Note.fromMidiNote(it.noteNumber).pitchClass }.distinct()
-    return identifyChordFromPitchClasses(pitchClasses)
-  }
-  
-  private fun identifyChordFromPitchClasses(pitchClasses: List<PitchClass>): Chord? {
-    return identifyChord(pitchClasses)
   }
 } 
