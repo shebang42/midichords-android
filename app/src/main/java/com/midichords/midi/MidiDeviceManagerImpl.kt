@@ -111,7 +111,11 @@ class MidiDeviceManagerImpl(
         addAction(UsbManager.ACTION_USB_DEVICE_ATTACHED)
         addAction(UsbManager.ACTION_USB_DEVICE_DETACHED)
       }
-      context.registerReceiver(usbReceiver, filter)
+      context.registerReceiver(
+        usbReceiver,
+        filter,
+        Context.RECEIVER_NOT_EXPORTED
+      )
       Log.d(TAG, "USB receiver registered")
       notifyListeners(ConnectionState.DISCONNECTED)
     } catch (e: Exception) {
