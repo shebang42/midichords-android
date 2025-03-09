@@ -14,5 +14,7 @@ dependencyResolutionManagement {
     }
 }
 
+// Suppress specific deprecation warnings
+
 rootProject.name = "MIDI Chords"
 include(":app") 

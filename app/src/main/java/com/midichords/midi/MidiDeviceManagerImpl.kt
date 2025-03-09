@@ -13,6 +13,7 @@ import android.media.midi.MidiInputPort
 import android.media.midi.MidiManager
 import android.media.midi.MidiReceiver
 import android.media.midi.MidiSender
+import android.os.Build
 import android.os.Handler
 import android.util.Log
 import java.util.concurrent.CopyOnWriteArrayList
@@ -39,7 +40,13 @@ class MidiDeviceManagerImpl(
       when (intent.action) {
         ACTION_USB_PERMISSION -> {
           synchronized(this) {
-            val device: UsbDevice? = intent.getParcelableExtra(UsbManager.EXTRA_DEVICE)
+            val device: UsbDevice? = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+              intent.getParcelableExtra(UsbManager.EXTRA_DEVICE, UsbDevice::class.java)
+            } else {
+              @Suppress("DEPRECATION")
+              intent.getParcelableExtra(UsbManager.EXTRA_DEVICE)
+            }
+            
             if (intent.getBooleanExtra(UsbManager.EXTRA_PERMISSION_GRANTED, false)) {
               device?.let {
                 Log.d(TAG, "USB permission granted for device: ${it.deviceName}")
@@ -52,14 +59,26 @@ class MidiDeviceManagerImpl(
           }
         }
         UsbManager.ACTION_USB_DEVICE_ATTACHED -> {
-          val device: UsbDevice? = intent.getParcelableExtra(UsbManager.EXTRA_DEVICE)
+          val device: UsbDevice? = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            intent.getParcelableExtra(UsbManager.EXTRA_DEVICE, UsbDevice::class.java)
+          } else {
+            @Suppress("DEPRECATION")
+            intent.getParcelableExtra(UsbManager.EXTRA_DEVICE)
+          }
+          
           device?.let {
             Log.d(TAG, "USB device attached: ${it.deviceName}")
             requestUsbPermission(it)
           }
         }
         UsbManager.ACTION_USB_DEVICE_DETACHED -> {
-          val device: UsbDevice? = intent.getParcelableExtra(UsbManager.EXTRA_DEVICE)
+          val device: UsbDevice? = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            intent.getParcelableExtra(UsbManager.EXTRA_DEVICE, UsbDevice::class.java)
+          } else {
+            @Suppress("DEPRECATION")
+            intent.getParcelableExtra(UsbManager.EXTRA_DEVICE)
+          }
+          
           device?.let {
             Log.d(TAG, "USB device detached: ${it.deviceName}")
             disconnect()
@@ -100,18 +119,23 @@ class MidiDeviceManagerImpl(
 
   override fun refreshAvailableDevices() {
     try {
-      midiManager?.devices?.let { devices ->
-        Log.d(TAG, "Found ${devices.size} MIDI devices")
-        if (devices.isEmpty()) {
-          notifyListeners(ConnectionState.DISCONNECTED, "No MIDI devices found")
-        } else {
-          // For now, just try to connect to the first device
-          connectToDevice(devices[0])
-        }
-      }
+      // Use the deprecated approach for all Android versions for now
+      @Suppress("DEPRECATION")
+      val devices = midiManager?.devices ?: emptyArray()
+      handleDeviceList(devices)
     } catch (e: Exception) {
       Log.e(TAG, "Error refreshing devices", e)
       notifyListeners(ConnectionState.ERROR, "Error refreshing devices: ${e.message}")
+    }
+  }
+  
+  private fun handleDeviceList(devices: Array<MidiDeviceInfo>) {
+    Log.d(TAG, "Found ${devices.size} MIDI devices")
+    if (devices.isEmpty()) {
+      notifyListeners(ConnectionState.DISCONNECTED, "No MIDI devices found")
+    } else {
+      // For now, just try to connect to the first device
+      connectToDevice(devices[0])
     }
   }
 
@@ -158,23 +182,30 @@ class MidiDeviceManagerImpl(
     }
   }
 
-  override fun connectToUsbDevice(usbDevice: UsbDevice) {
+  override fun connectToUsbDevice(device: UsbDevice) {
     try {
-      midiManager?.devices?.forEach { deviceInfo ->
-        if (deviceInfo.type == MidiDeviceInfo.TYPE_USB) {
-          val properties = deviceInfo.properties
-          val deviceId = properties.getInt(MidiDeviceInfo.PROPERTY_USB_DEVICE)
-          if (deviceId == usbDevice.deviceId) {
-            connectToDevice(deviceInfo)
-            return
-          }
-        }
-      }
-      notifyListeners(ConnectionState.ERROR, "USB device not recognized as MIDI device")
+      // Use the deprecated approach for all Android versions for now
+      @Suppress("DEPRECATION")
+      val devices = midiManager?.devices ?: emptyArray()
+      findAndConnectToUsbDevice(devices, device)
     } catch (e: Exception) {
       Log.e(TAG, "Error connecting to USB device", e)
       notifyListeners(ConnectionState.ERROR, "Error connecting to USB device: ${e.message}")
     }
+  }
+  
+  private fun findAndConnectToUsbDevice(devices: Array<MidiDeviceInfo>, usbDevice: UsbDevice) {
+    for (deviceInfo in devices) {
+      if (deviceInfo.type == MidiDeviceInfo.TYPE_USB) {
+        val properties = deviceInfo.properties
+        val deviceId = properties.getInt(MidiDeviceInfo.PROPERTY_USB_DEVICE)
+        if (deviceId == usbDevice.deviceId) {
+          connectToDevice(deviceInfo)
+          return
+        }
+      }
+    }
+    notifyListeners(ConnectionState.ERROR, "USB device not recognized as MIDI device")
   }
 
   private fun requestUsbPermission(device: UsbDevice) {
