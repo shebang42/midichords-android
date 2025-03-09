@@ -6,10 +6,13 @@ import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
-import com.midichords.midi.ConnectionStateListener
-import com.midichords.midi.MidiDeviceManagerImpl
+import com.midichords.midi.ConnectionState
+import com.midichords.midi.MidiDeviceListener
+import com.midichords.midi.MidiDeviceManager
+import com.midichords.midi.MidiEvent
+import com.midichords.midi.MidiEventListener
 
-class MainViewModel(application: Application) : AndroidViewModel(application), ConnectionStateListener {
+class MainViewModel(application: Application) : AndroidViewModel(application), MidiDeviceListener, MidiEventListener {
   companion object {
     private const val TAG = "MainViewModel"
   }
@@ -23,9 +26,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application), C
   private val _availableDevices = MutableLiveData<List<UsbDevice>>()
   val availableDevices: LiveData<List<UsbDevice>> = _availableDevices
 
+  private val _lastMidiEvent = MutableLiveData<MidiEvent>()
+  val lastMidiEvent: LiveData<MidiEvent> = _lastMidiEvent
+
   private val midiDeviceManager = try {
-    MidiDeviceManagerImpl(application).also {
+    MidiDeviceManager(application).also {
       it.registerListener(this)
+      it.addMidiEventListener(this)
     }
   } catch (e: Exception) {
     Log.e(TAG, "Failed to initialize MIDI device manager", e)
@@ -35,23 +42,23 @@ class MainViewModel(application: Application) : AndroidViewModel(application), C
   init {
     Log.d(TAG, "Initializing MainViewModel")
     _connectionState.value = ConnectionState.DISCONNECTED
+    _connectionMessage.value = "Disconnected"
     refreshAvailableDevices()
   }
 
-  override fun onConnectionStateChanged(state: ConnectionState, message: String?) {
-    Log.d(TAG, "Connection state changed to: $state, message: $message")
-    _connectionState.postValue(state)
-    message?.let { _connectionMessage.postValue(it) }
+  override fun onConnectionStateChanged(state: ConnectionState, message: String) {
+    Log.d(TAG, "Connection state changed: $state - $message")
+    _connectionState.value = state
+    _connectionMessage.value = message
   }
 
   fun refreshAvailableDevices() {
     try {
-      val devices = midiDeviceManager?.getAvailableDevices() ?: emptyList()
-      Log.d(TAG, "Found ${devices.size} available devices")
-      _availableDevices.value = devices
+      midiDeviceManager?.refreshAvailableDevices()
     } catch (e: Exception) {
-      Log.e(TAG, "Error refreshing available devices", e)
-      _connectionMessage.postValue("Error checking available devices: ${e.message}")
+      Log.e(TAG, "Error refreshing devices", e)
+      _connectionState.value = ConnectionState.ERROR
+      _connectionMessage.value = "Error refreshing devices: ${e.message}"
     }
   }
 
@@ -59,11 +66,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application), C
     try {
       midiDeviceManager?.connectToDevice(device) ?: run {
         Log.e(TAG, "Cannot connect - MIDI manager not initialized")
-        _connectionMessage.postValue("MIDI system not available")
+        _connectionMessage.value = "MIDI system not available"
       }
     } catch (e: Exception) {
       Log.e(TAG, "Error connecting to device", e)
-      _connectionMessage.postValue("Error connecting to device: ${e.message}")
+      _connectionState.value = ConnectionState.ERROR
+      _connectionMessage.value = "Error connecting to device: ${e.message}"
     }
   }
 
@@ -72,8 +80,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application), C
       midiDeviceManager?.disconnect()
     } catch (e: Exception) {
       Log.e(TAG, "Error disconnecting", e)
-      _connectionMessage.postValue("Error disconnecting: ${e.message}")
+      _connectionState.value = ConnectionState.ERROR
+      _connectionMessage.value = "Error disconnecting: ${e.message}"
     }
+  }
+
+  override fun onMidiEvent(event: MidiEvent) {
+    Log.d(TAG, "MIDI event received: $event")
+    _lastMidiEvent.value = event
   }
 
   override fun onCleared() {
@@ -83,6 +97,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application), C
     } catch (e: Exception) {
       Log.e(TAG, "Error disposing MIDI manager", e)
     }
+    midiDeviceManager?.unregisterListener(this)
+    midiDeviceManager?.removeMidiEventListener(this)
   }
 }
 

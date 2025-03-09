@@ -10,13 +10,13 @@ interface MidiDeviceManager {
    * Register a listener for connection state changes.
    * @param listener The listener to register
    */
-  fun registerListener(listener: ConnectionStateListener)
+  fun registerListener(listener: MidiDeviceListener)
 
   /**
    * Unregister a previously registered listener.
    * @param listener The listener to unregister
    */
-  fun unregisterListener(listener: ConnectionStateListener)
+  fun unregisterListener(listener: MidiDeviceListener)
 
   /**
    * Register a listener for MIDI events.
@@ -64,4 +64,10 @@ interface MidiDeviceManager {
    * Clean up resources when the manager is no longer needed.
    */
   fun dispose()
+
+  fun refreshAvailableDevices()
+
+  fun addMidiEventListener(listener: MidiEventListener)
+
+  fun removeMidiEventListener(listener: MidiEventListener)
 } 
