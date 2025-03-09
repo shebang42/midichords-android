@@ -130,6 +130,9 @@ class MidiDeviceManagerImpl(
     )
 
     Log.d(TAG, "MidiDeviceManager initialized")
+    
+    // Log all USB devices at initialization
+    logAllUsbDevices()
   }
 
   override fun registerListener(listener: MidiDeviceListener) {
@@ -142,7 +145,15 @@ class MidiDeviceManagerImpl(
 
   override fun refreshAvailableDevices() {
     try {
-      // Use the deprecated approach for all Android versions for now
+      // First, check for USB devices directly
+      val usbDevices = checkForUsbDevices()
+      if (usbDevices.isNotEmpty()) {
+        Log.d(TAG, "Found ${usbDevices.size} USB devices, requesting permission for the first one")
+        requestUsbPermission(usbDevices.first())
+        return
+      }
+      
+      // If no USB devices found, try the MIDI manager approach
       @Suppress("DEPRECATION")
       val devices = midiManager?.devices ?: emptyArray()
       handleDeviceList(devices)
@@ -150,6 +161,78 @@ class MidiDeviceManagerImpl(
       Log.e(TAG, "Error refreshing devices", e)
       notifyListeners(ConnectionState.ERROR, "Error refreshing devices: ${e.message}")
     }
+  }
+  
+  /**
+   * Check for USB devices directly using UsbManager
+   */
+  private fun checkForUsbDevices(): List<UsbDevice> {
+    val deviceList = usbManager.deviceList
+    Log.d(TAG, "Found ${deviceList.size} USB devices via UsbManager")
+    
+    // Log details about each device
+    deviceList.forEach { (name, device) ->
+      Log.d(TAG, "USB Device: $name")
+      Log.d(TAG, "  Device ID: ${device.deviceId}")
+      Log.d(TAG, "  Product ID: ${device.productId}")
+      Log.d(TAG, "  Vendor ID: ${device.vendorId}")
+      Log.d(TAG, "  Device Class: ${device.deviceClass}")
+      Log.d(TAG, "  Device Subclass: ${device.deviceSubclass}")
+      Log.d(TAG, "  Interface Count: ${device.interfaceCount}")
+      
+      // Check if this device has a MIDI interface
+      var hasMidiInterface = false
+      for (i in 0 until device.interfaceCount) {
+        val usbInterface = device.getInterface(i)
+        if (usbInterface.interfaceClass == 1 && usbInterface.interfaceSubclass == 3) {
+          hasMidiInterface = true
+          Log.d(TAG, "  Interface $i is a MIDI interface")
+        }
+      }
+      
+      if (hasMidiInterface) {
+        Log.d(TAG, "  This device has a MIDI interface")
+      } else {
+        Log.d(TAG, "  This device does not have a MIDI interface")
+      }
+    }
+    
+    return deviceList.values.toList()
+  }
+  
+  /**
+   * Log all USB devices for debugging purposes
+   */
+  private fun logAllUsbDevices() {
+    Log.d(TAG, "=== USB DEVICES ===")
+    val deviceList = usbManager.deviceList
+    if (deviceList.isEmpty()) {
+      Log.d(TAG, "No USB devices found")
+    } else {
+      deviceList.forEach { (name, device) ->
+        Log.d(TAG, "USB Device: $name")
+        Log.d(TAG, "  Device ID: ${device.deviceId}")
+        Log.d(TAG, "  Product ID: ${device.productId}")
+        Log.d(TAG, "  Vendor ID: ${device.vendorId}")
+      }
+    }
+    
+    Log.d(TAG, "=== MIDI DEVICES ===")
+    @Suppress("DEPRECATION")
+    val midiDevices = midiManager?.devices ?: emptyArray()
+    if (midiDevices.isEmpty()) {
+      Log.d(TAG, "No MIDI devices found")
+    } else {
+      midiDevices.forEach { deviceInfo ->
+        val properties = deviceInfo.properties
+        Log.d(TAG, "MIDI Device: ${properties.getString(MidiDeviceInfo.PROPERTY_NAME)}")
+        Log.d(TAG, "  Type: ${if (deviceInfo.type == MidiDeviceInfo.TYPE_USB) "USB" else "Other"}")
+        if (deviceInfo.type == MidiDeviceInfo.TYPE_USB) {
+          Log.d(TAG, "  Device ID: ${properties.getInt(MidiDeviceInfo.PROPERTY_USB_DEVICE)}")
+        }
+      }
+    }
+    Log.d(TAG, "==================")
   }
   
   private fun handleDeviceList(devices: Array<MidiDeviceInfo>) {
@@ -188,6 +271,7 @@ class MidiDeviceManagerImpl(
 
   private fun connectToDevice(deviceInfo: MidiDeviceInfo) {
     try {
+      Log.d(TAG, "Attempting to connect to MIDI device: ${deviceInfo.properties.getString(MidiDeviceInfo.PROPERTY_NAME)}")
       midiManager?.openDevice(deviceInfo, { device ->
         if (device != null) {
           currentDevice = device
@@ -195,6 +279,7 @@ class MidiDeviceManagerImpl(
           setupMidiInput(device)
           notifyListeners(ConnectionState.CONNECTED, "Connected to ${deviceInfo.properties.getString(MidiDeviceInfo.PROPERTY_NAME)}")
         } else {
+          Log.e(TAG, "Failed to open MIDI device - device is null")
           notifyListeners(ConnectionState.ERROR, "Failed to open MIDI device")
           // Start retrying if we couldn't open the device
           startRetrying()
@@ -210,6 +295,16 @@ class MidiDeviceManagerImpl(
 
   private fun setupMidiInput(device: MidiDevice) {
     try {
+      Log.d(TAG, "Setting up MIDI input for device: ${currentDeviceInfo?.properties?.getString(MidiDeviceInfo.PROPERTY_NAME)}")
+      Log.d(TAG, "Device has ${device.info.inputPortCount} input ports and ${device.info.outputPortCount} output ports")
+      
+      if (device.info.inputPortCount == 0) {
+        Log.e(TAG, "Device has no input ports")
+        notifyListeners(ConnectionState.ERROR, "Device has no input ports")
+        startRetrying()
+        return
+      }
+      
       val inputPort = device.openInputPort(0)
       if (inputPort != null) {
         // Store the input port
@@ -222,7 +317,7 @@ class MidiDeviceManagerImpl(
         // The device will send MIDI data to our app, and we'll process it in the MidiReceiver
         
         Log.d(TAG, "MIDI input port opened successfully")
-        notifyListeners(ConnectionState.CONNECTED, "MIDI input port opened successfully")
+        notifyListeners(ConnectionState.CONNECTED, "Connected to ${currentDeviceInfo?.properties?.getString(MidiDeviceInfo.PROPERTY_NAME)}")
       } else {
         Log.e(TAG, "Failed to open MIDI input port")
         notifyListeners(ConnectionState.ERROR, "Failed to open MIDI input port")
@@ -239,7 +334,34 @@ class MidiDeviceManagerImpl(
 
   override fun connectToUsbDevice(device: UsbDevice) {
     try {
-      // Use the deprecated approach for all Android versions for now
+      Log.d(TAG, "Attempting to connect to USB device: ${device.deviceName}")
+      
+      // First check if we have permission
+      if (!usbManager.hasPermission(device)) {
+        Log.d(TAG, "No permission for USB device, requesting permission")
+        requestUsbPermission(device)
+        return
+      }
+      
+      // Check if this device has a MIDI interface
+      var hasMidiInterface = false
+      for (i in 0 until device.interfaceCount) {
+        val usbInterface = device.getInterface(i)
+        if (usbInterface.interfaceClass == 1 && usbInterface.interfaceSubclass == 3) {
+          hasMidiInterface = true
+          Log.d(TAG, "Device has a MIDI interface")
+          break
+        }
+      }
+      
+      if (!hasMidiInterface) {
+        Log.e(TAG, "Device does not have a MIDI interface")
+        notifyListeners(ConnectionState.ERROR, "Device does not have a MIDI interface")
+        startRetrying()
+        return
+      }
+      
+      // Try to find the device in the MIDI manager
       @Suppress("DEPRECATION")
       val devices = midiManager?.devices ?: emptyArray()
       findAndConnectToUsbDevice(devices, device)
@@ -252,22 +374,39 @@ class MidiDeviceManagerImpl(
   }
   
   private fun findAndConnectToUsbDevice(devices: Array<MidiDeviceInfo>, usbDevice: UsbDevice) {
+    Log.d(TAG, "Searching for USB device ${usbDevice.deviceName} in ${devices.size} MIDI devices")
+    
     for (deviceInfo in devices) {
       if (deviceInfo.type == MidiDeviceInfo.TYPE_USB) {
         val properties = deviceInfo.properties
         val deviceId = properties.getInt(MidiDeviceInfo.PROPERTY_USB_DEVICE)
+        Log.d(TAG, "Checking MIDI device with ID $deviceId against USB device ID ${usbDevice.deviceId}")
+        
         if (deviceId == usbDevice.deviceId) {
+          Log.d(TAG, "Found matching MIDI device for USB device ${usbDevice.deviceName}")
           connectToDevice(deviceInfo)
           return
         }
       }
     }
+    
+    Log.e(TAG, "USB device not recognized as MIDI device. This could be because:")
+    Log.e(TAG, "1. The device is not a MIDI device")
+    Log.e(TAG, "2. The device requires a driver that is not installed")
+    Log.e(TAG, "3. The Android MIDI service has not yet recognized the device")
+    
+    // If we have a USB device but it's not in the MIDI devices list,
+    // we'll try again after a short delay to give the MIDI service time to recognize it
+    handler.postDelayed({
+      Log.d(TAG, "Retrying MIDI device detection after delay")
+      refreshAvailableDevices()
+    }, 1000)
+    
     notifyListeners(ConnectionState.ERROR, "USB device not recognized as MIDI device")
-    // Start retrying if we couldn't find the USB device
-    startRetrying()
   }
 
   private fun requestUsbPermission(device: UsbDevice) {
+    Log.d(TAG, "Requesting permission for USB device: ${device.deviceName}")
     val permissionIntent = PendingIntent.getBroadcast(
       context,
       0,

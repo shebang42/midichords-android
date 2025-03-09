@@ -10,8 +10,51 @@
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_margin="16dp"
-        app:layout_constraintBottom_toTopOf="@id/chordDisplayContainer"
+        app:layout_constraintBottom_toTopOf="@id/deviceControlsContainer"
         app:layout_constraintTop_toTopOf="parent" />
+
+    <!-- Device controls container -->
+    <LinearLayout
+        android:id="@+id/deviceControlsContainer"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:layout_margin="16dp"
+        app:layout_constraintBottom_toTopOf="@id/chordDisplayContainer">
+
+        <!-- Connection status indicator -->
+        <TextView
+            android:id="@+id/connectionStatus"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Disconnected"
+            android:textSize="16sp"
+            android:gravity="center" />
+
+        <!-- Scan button -->
+        <Button
+            android:id="@+id/scanButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Scan for USB Devices"
+            android:layout_marginTop="8dp" />
+
+        <!-- Device list -->
+        <ListView
+            android:id="@+id/deviceList"
+            android:layout_width="match_parent"
+            android:layout_height="100dp"
+            android:layout_marginTop="8dp" />
+
+        <!-- Device details -->
+        <TextView
+            android:id="@+id/deviceDetails"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="No device selected"
+            android:textSize="14sp" />
+    </LinearLayout>
 
     <!-- Placeholder for chord display -->
     <FrameLayout
@@ -20,16 +63,5 @@
         android:layout_height="wrap_content"
         android:layout_margin="16dp"
         app:layout_constraintBottom_toBottomOf="parent" />
-
-    <!-- Connection status indicator -->
-    <TextView
-        android:id="@+id/connectionStatus"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_margin="16dp"
-        android:text="Disconnected"
-        android:textSize="16sp"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintTop_toTopOf="parent" />
 
 </androidx.constraintlayout.widget.ConstraintLayout> 

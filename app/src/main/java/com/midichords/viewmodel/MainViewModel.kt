@@ -45,6 +45,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application), M
 
   private val _lastMidiEvent = MutableLiveData<MidiEvent>()
   val lastMidiEvent: LiveData<MidiEvent> = _lastMidiEvent
+  
+  private val usbManager: UsbManager = application.getSystemService(Context.USB_SERVICE) as UsbManager
 
   private val noteProcessor: NoteProcessor = NoteProcessorImpl()
   private val chordIdentifier: ChordIdentifier = BasicChordIdentifier().apply {
@@ -87,11 +89,54 @@ class MainViewModel(application: Application) : AndroidViewModel(application), M
 
   fun refreshAvailableDevices() {
     try {
+      // First, scan for USB devices directly
+      scanForUsbDevices()
+      
+      // Then, let the MIDI device manager try to find MIDI devices
       midiDeviceManager?.refreshAvailableDevices()
     } catch (e: Exception) {
       Log.e(TAG, "Error refreshing devices", e)
       _connectionState.value = ConnectionState.ERROR
       _connectionMessage.value = "Error refreshing devices: ${e.message}"
+    }
+  }
+  
+  /**
+   * Scan for USB devices directly using UsbManager
+   */
+  private fun scanForUsbDevices() {
+    try {
+      val deviceList = usbManager.deviceList
+      Log.d(TAG, "Found ${deviceList.size} USB devices via UsbManager")
+      
+      // Update the available devices LiveData
+      _availableDevices.value = deviceList.values.toList()
+      
+      // Log details about each device
+      deviceList.forEach { (name, device) ->
+        Log.d(TAG, "USB Device: $name")
+        Log.d(TAG, "  Device ID: ${device.deviceId}")
+        Log.d(TAG, "  Product ID: ${device.productId}")
+        Log.d(TAG, "  Vendor ID: ${device.vendorId}")
+        
+        // Check if this device has a MIDI interface
+        var hasMidiInterface = false
+        for (i in 0 until device.interfaceCount) {
+          val usbInterface = device.getInterface(i)
+          if (usbInterface.interfaceClass == 1 && usbInterface.interfaceSubclass == 3) {
+            hasMidiInterface = true
+            Log.d(TAG, "  Interface $i is a MIDI interface")
+          }
+        }
+        
+        if (hasMidiInterface) {
+          Log.d(TAG, "  This device has a MIDI interface")
+        } else {
+          Log.d(TAG, "  This device does not have a MIDI interface")
+        }
+      }
+    } catch (e: Exception) {
+      Log.e(TAG, "Error scanning for USB devices", e)
     }
   }
 
