@@ -18,7 +18,7 @@ import com.midichords.midi.MidiEventType
 import com.midichords.viewmodel.MainViewModel
 import java.text.SimpleDateFormat
 import java.util.*
-import java.util.concurrent.LinkedList
+import java.util.LinkedList
 
 class MainActivity : AppCompatActivity() {
   private lateinit var binding: ActivityMainBinding

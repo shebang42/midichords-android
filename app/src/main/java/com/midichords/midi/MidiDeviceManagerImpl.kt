@@ -180,7 +180,7 @@ class MidiDeviceManagerImpl(
     Log.d(TAG, "MidiDeviceManager initialized")
     
     // Log all USB devices at initialization
-    logAllUsbDevices()
+    logAllUsbDevices(usbManager.deviceList)
   }
 
   override fun registerListener(listener: MidiDeviceListener) {
