@@ -116,6 +116,9 @@ class MainActivity : AppCompatActivity() {
         }
       }
     }
+    
+    // Set up no chord message
+    binding.chordDisplayView.setNoChordMessage("No Chord Detected")
   }
   
   private fun toggleControlsVisibility() {
@@ -247,6 +250,17 @@ class MainActivity : AppCompatActivity() {
           binding.midiChannelInfo.text = "Channel: ${it.channel + 1}" // Display 1-based channel number
         }
       }
+      
+      // Update StaffView with active notes
+      binding.staffView.setActiveNotes(notes)
+    }
+    
+    // Observe current chord
+    viewModel.currentChord.observe(this) { chord ->
+      Log.d(TAG, "Current chord updated: ${chord?.getName() ?: "None"}")
+      
+      // Update ChordDisplayView
+      binding.chordDisplayView.setChord(chord)
     }
   }
   

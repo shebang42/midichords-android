@@ -73,27 +73,35 @@ class ChordDisplayView @JvmOverloads constructor(
     
     // Draw chord name or "No Chord" message
     val centerX = width / 2f
-    val centerY = height / 2f
+    val centerY = height / 2f - 10f  // Adjust for visual centering with subtexts
     
     if (currentChord != null) {
       // Draw the chord name
-      textPaint.textSize = 48f
-      canvas.drawText(currentChord!!.toString(), centerX, centerY, textPaint)
+      textPaint.textSize = 64f
+      canvas.drawText(currentChord!!.getName(), centerX, centerY, textPaint)
       
-      // Draw additional info if available (like inversion)
+      // Draw additional info like full name and inversion
+      val detailsY = centerY + 40f
+      
+      // Create detail text combining full name and inversion if applicable
       val inversionText = when (currentChord!!.inversion) {
-        0 -> "Root Position"
-        1 -> "First Inversion"
-        2 -> "Second Inversion"
-        3 -> "Third Inversion"
-        else -> ""
+        0 -> ""
+        1 -> "(1st inversion)"
+        2 -> "(2nd inversion)"
+        3 -> "(3rd inversion)"
+        else -> "(${currentChord!!.inversion}th inversion)"
       }
       
-      if (inversionText.isNotEmpty()) {
-        canvas.drawText(inversionText, centerX, centerY + 40f, subtextPaint)
+      val detailText = if (inversionText.isNotEmpty()) {
+        "${currentChord!!.getFullName()} $inversionText"
+      } else {
+        currentChord!!.getFullName()
       }
+      
+      canvas.drawText(detailText, centerX, detailsY, subtextPaint)
     } else {
       // Draw the "No Chord" message
+      textPaint.textSize = 48f
       canvas.drawText(noChordMessage, centerX, centerY, textPaint)
     }
   }
