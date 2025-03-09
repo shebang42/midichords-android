@@ -45,4 +45,10 @@ interface MidiDeviceManager {
    * @param listener The listener to remove
    */
   fun removeMidiEventListener(listener: MidiEventListener)
+  
+  /**
+   * Clean up resources when the manager is no longer needed.
+   * This should be called when the app is being destroyed.
+   */
+  fun cleanup()
 }

@@ -158,6 +158,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application), M
     }
     
     chordIdentifier.unregisterChordListener(this)
+    
+    // Clean up the MIDI device manager resources
+    midiDeviceManager?.cleanup()
+    
+    Log.d(TAG, "MainViewModel cleared and resources cleaned up")
   }
 }
 

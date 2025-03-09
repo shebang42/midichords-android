@@ -15,6 +15,7 @@ import android.media.midi.MidiReceiver
 import android.media.midi.MidiSender
 import android.os.Build
 import android.os.Handler
+import android.os.Looper
 import android.util.Log
 import java.util.concurrent.CopyOnWriteArrayList
 
@@ -27,6 +28,8 @@ class MidiDeviceManagerImpl(
   companion object {
     private const val TAG = "MidiDeviceManagerImpl"
     private const val ACTION_USB_PERMISSION = "com.midichords.USB_PERMISSION"
+    private const val RETRY_INTERVAL_MS = 2000L // 2 seconds between retries
+    private const val MAX_RETRIES = 30 // Maximum number of retries (1 minute total with 2-second interval)
   }
 
   private val listeners = CopyOnWriteArrayList<MidiDeviceListener>()
@@ -34,6 +37,22 @@ class MidiDeviceManagerImpl(
   private val midiInputProcessor = MidiInputProcessorImpl()
   private var currentDeviceInfo: MidiDeviceInfo? = null
   private var currentInputPort: MidiInputPort? = null
+  
+  // Handler and Runnable for retry mechanism
+  private val handler = Handler(Looper.getMainLooper())
+  private var retryCount = 0
+  private var isRetrying = false
+  
+  private val retryRunnable = Runnable {
+    if (retryCount < MAX_RETRIES) {
+      Log.d(TAG, "Retrying MIDI device search (attempt ${retryCount + 1}/$MAX_RETRIES)")
+      refreshAvailableDevices()
+      retryCount++
+    } else {
+      Log.d(TAG, "Max retries reached, stopping automatic retry")
+      stopRetrying()
+    }
+  }
 
   private val usbReceiver = object : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
@@ -68,6 +87,8 @@ class MidiDeviceManagerImpl(
           
           device?.let {
             Log.d(TAG, "USB device attached: ${it.deviceName}")
+            // Stop retrying if we were in retry mode
+            stopRetrying()
             requestUsbPermission(it)
           }
         }
@@ -82,6 +103,8 @@ class MidiDeviceManagerImpl(
           device?.let {
             Log.d(TAG, "USB device detached: ${it.deviceName}")
             disconnect()
+            // Start retrying to find new devices
+            startRetrying()
           }
         }
       }
@@ -133,9 +156,33 @@ class MidiDeviceManagerImpl(
     Log.d(TAG, "Found ${devices.size} MIDI devices")
     if (devices.isEmpty()) {
       notifyListeners(ConnectionState.DISCONNECTED, "No MIDI devices found")
+      // Start retry mechanism if not already retrying
+      if (!isRetrying) {
+        startRetrying()
+      }
     } else {
+      // Stop retrying since we found devices
+      stopRetrying()
       // For now, just try to connect to the first device
       connectToDevice(devices[0])
+    }
+  }
+  
+  private fun startRetrying() {
+    if (!isRetrying) {
+      isRetrying = true
+      retryCount = 0
+      handler.postDelayed(retryRunnable, RETRY_INTERVAL_MS)
+      Log.d(TAG, "Started automatic retry for MIDI device search")
+    }
+  }
+  
+  private fun stopRetrying() {
+    if (isRetrying) {
+      handler.removeCallbacks(retryRunnable)
+      isRetrying = false
+      retryCount = 0
+      Log.d(TAG, "Stopped automatic retry for MIDI device search")
     }
   }
 
@@ -149,11 +196,15 @@ class MidiDeviceManagerImpl(
           notifyListeners(ConnectionState.CONNECTED, "Connected to ${deviceInfo.properties.getString(MidiDeviceInfo.PROPERTY_NAME)}")
         } else {
           notifyListeners(ConnectionState.ERROR, "Failed to open MIDI device")
+          // Start retrying if we couldn't open the device
+          startRetrying()
         }
       }, null)
     } catch (e: Exception) {
       Log.e(TAG, "Error connecting to device", e)
       notifyListeners(ConnectionState.ERROR, "Error connecting to device: ${e.message}")
+      // Start retrying if there was an error
+      startRetrying()
     }
   }
 
@@ -175,10 +226,14 @@ class MidiDeviceManagerImpl(
       } else {
         Log.e(TAG, "Failed to open MIDI input port")
         notifyListeners(ConnectionState.ERROR, "Failed to open MIDI input port")
+        // Start retrying if we couldn't open the input port
+        startRetrying()
       }
     } catch (e: Exception) {
       Log.e(TAG, "Error setting up MIDI input", e)
       notifyListeners(ConnectionState.ERROR, "Error setting up MIDI input: ${e.message}")
+      // Start retrying if there was an error
+      startRetrying()
     }
   }
 
@@ -191,6 +246,8 @@ class MidiDeviceManagerImpl(
     } catch (e: Exception) {
       Log.e(TAG, "Error connecting to USB device", e)
       notifyListeners(ConnectionState.ERROR, "Error connecting to USB device: ${e.message}")
+      // Start retrying if there was an error
+      startRetrying()
     }
   }
   
@@ -206,6 +263,8 @@ class MidiDeviceManagerImpl(
       }
     }
     notifyListeners(ConnectionState.ERROR, "USB device not recognized as MIDI device")
+    // Start retrying if we couldn't find the USB device
+    startRetrying()
   }
 
   private fun requestUsbPermission(device: UsbDevice) {
@@ -226,6 +285,8 @@ class MidiDeviceManagerImpl(
       currentDevice = null
       currentDeviceInfo = null
       notifyListeners(ConnectionState.DISCONNECTED, "Disconnected")
+      // Start retrying to find new devices
+      startRetrying()
     } catch (e: Exception) {
       Log.e(TAG, "Error disconnecting", e)
       notifyListeners(ConnectionState.ERROR, "Error disconnecting: ${e.message}")
@@ -242,5 +303,16 @@ class MidiDeviceManagerImpl(
 
   override fun removeMidiEventListener(listener: MidiEventListener) {
     midiInputProcessor.unregisterListener(listener)
+  }
+  
+  // Call this method when the app is being destroyed to clean up resources
+  override fun cleanup() {
+    stopRetrying()
+    disconnect()
+    try {
+      context.unregisterReceiver(usbReceiver)
+    } catch (e: Exception) {
+      Log.e(TAG, "Error unregistering receiver", e)
+    }
   }
 }
