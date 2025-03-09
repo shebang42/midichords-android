@@ -32,6 +32,9 @@ class MainActivity : AppCompatActivity() {
   private var debugMode = false
   private val maxLogEntries = 100
   private val logEntries = LinkedList<String>()
+  
+  // Controls visibility state
+  private var controlsVisible = false
 
   companion object {
     private const val TAG = "MainActivity"
@@ -65,31 +68,23 @@ class MainActivity : AppCompatActivity() {
     deviceAdapter = ArrayAdapter(this, android.R.layout.simple_list_item_1, mutableListOf())
     binding.deviceList.adapter = deviceAdapter
 
+    // Set up toggle controls button
+    binding.toggleControlsButton.setOnClickListener {
+      toggleControlsVisibility()
+    }
+    
     // Set up scan button
     binding.scanButton.setOnClickListener {
       Log.d(TAG, "Scan button clicked")
       scanForUsbDevices()
     }
     
-    // Remove the test MIDI button click listener
-    /*
-    // Set up test MIDI button
-    binding.testMidiButton.setOnClickListener {
-      Log.d(TAG, "Test MIDI button clicked")
-      viewModel.sendTestMidiMessage()
-      Toast.makeText(this, "Sending test MIDI message (C4 note)", Toast.LENGTH_SHORT).show()
+    // Set up clear log button
+    binding.btnClearLog.setOnClickListener {
+      clearLog()
+      Toast.makeText(this, "Debug log cleared", Toast.LENGTH_SHORT).show()
     }
-    */
-
-    // Remove the USB mode settings button click listener
-    /*
-    // Add USB mode settings button
-    binding.usbModeButton.setOnClickListener {
-      Log.d(TAG, "USB mode button clicked")
-      showUsbModeInstructions()
-    }
-    */
-
+    
     // Set up device list click listener
     binding.deviceList.setOnItemClickListener { _, _, position, _ ->
       val deviceName = deviceAdapter.getItem(position)
@@ -114,6 +109,18 @@ class MainActivity : AppCompatActivity() {
       }
     }
   }
+  
+  private fun toggleControlsVisibility() {
+    controlsVisible = !controlsVisible
+    binding.controlsContainer.visibility = if (controlsVisible) View.VISIBLE else View.GONE
+    
+    // If showing controls and we're in debug mode, also show debug container
+    if (controlsVisible && debugMode) {
+      binding.debugContainer.visibility = View.VISIBLE
+    } else {
+      binding.debugContainer.visibility = View.GONE
+    }
+  }
 
   private fun setupObservers() {
     viewModel.connectionState.observe(this) { state ->
@@ -133,11 +140,9 @@ class MainActivity : AppCompatActivity() {
       if (state == ConnectionState.CONNECTED) {
         binding.scanButton.isEnabled = false
         binding.deviceList.isEnabled = false
-        // binding.btnConnect.isEnabled = false
       } else {
         binding.scanButton.isEnabled = true
         binding.deviceList.isEnabled = true
-        // binding.btnConnect.isEnabled = true
       }
     }
 
@@ -437,8 +442,10 @@ class MainActivity : AppCompatActivity() {
     debugMode = !debugMode
     
     if (debugMode) {
-      // Show debug UI
-      binding.debugContainer.visibility = View.VISIBLE
+      // Show debug UI only if controls are visible
+      if (controlsVisible) {
+        binding.debugContainer.visibility = View.VISIBLE
+      }
       Toast.makeText(this, "Debug mode enabled", Toast.LENGTH_SHORT).show()
       
       // Add debug MIDI event listener
