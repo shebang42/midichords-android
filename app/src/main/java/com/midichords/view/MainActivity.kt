@@ -297,12 +297,13 @@ class MainActivity : AppCompatActivity() {
    */
   private fun openUsbSettings() {
     try {
-      // Try to open USB settings directly
-      val intent = Intent(android.provider.Settings.ACTION_USB_SETTINGS)
+      // Try to open system settings since there's no direct USB settings action
+      val intent = Intent(android.provider.Settings.ACTION_SETTINGS)
       startActivity(intent)
+      Toast.makeText(this, "Please navigate to 'Connected devices' or 'USB' settings", Toast.LENGTH_LONG).show()
     } catch (e: Exception) {
-      Log.e(TAG, "Failed to open USB settings", e)
-      Toast.makeText(this, "Could not open USB settings. Please open them manually.", Toast.LENGTH_LONG).show()
+      Log.e(TAG, "Failed to open settings", e)
+      Toast.makeText(this, "Could not open settings. Please open them manually.", Toast.LENGTH_LONG).show()
     }
   }
 
