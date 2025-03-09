@@ -47,19 +47,15 @@
             android:layout_marginTop="8dp"
             android:text="Connect to Selected Device" />
             
-        <Button
-            android:id="@+id/btnDisconnect"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:text="Disconnect" />
-            
+        <!-- USB Mode Settings button -->
+        <!--
         <Button
             android:id="@+id/btnSettings"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="8dp"
             android:text="USB Mode Settings" />
+        -->
     </LinearLayout>
 
     <!-- Staff view placeholder -->
@@ -157,14 +153,6 @@
             android:text="Scan for USB Devices"
             android:layout_marginTop="8dp" />
 
-        <!-- USB Mode Settings button -->
-        <Button
-            android:id="@+id/usbModeButton"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="USB Mode Settings"
-            android:layout_marginTop="8dp" />
-
         <!-- Device list -->
         <ListView
             android:id="@+id/deviceList"
@@ -202,6 +190,7 @@
             android:gravity="center" />
 
         <!-- Test MIDI Button -->
+        <!--
         <Button
             android:id="@+id/testMidiButton"
             android:layout_width="match_parent"
@@ -209,6 +198,7 @@
             android:text="Test MIDI (Send C4 Note)"
             android:layout_marginTop="4dp"
             android:layout_marginBottom="4dp" />
+        -->
 
         <TextView
             android:id="@+id/midiEventInfo"
