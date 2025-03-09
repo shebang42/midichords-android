@@ -51,6 +51,11 @@ class MainActivity : AppCompatActivity() {
     setupObservers()
     Log.d(TAG, "MainActivity created")
 
+    // Initialize toggle button state
+    binding.toggleControlsButton.isSelected = controlsVisible
+    binding.controlsContainer.visibility = if (controlsVisible) View.VISIBLE else View.GONE
+    binding.debugContainer.visibility = View.GONE
+
     // Move debug mode toggle to connection status long press
     binding.connectionStatus.setOnLongClickListener {
       toggleDebugMode()
@@ -112,13 +117,55 @@ class MainActivity : AppCompatActivity() {
   
   private fun toggleControlsVisibility() {
     controlsVisible = !controlsVisible
-    binding.controlsContainer.visibility = if (controlsVisible) View.VISIBLE else View.GONE
     
-    // If showing controls and we're in debug mode, also show debug container
-    if (controlsVisible && debugMode) {
-      binding.debugContainer.visibility = View.VISIBLE
+    // Update the toggle button's selected state
+    binding.toggleControlsButton.isSelected = controlsVisible
+    
+    // Show/hide the controls container with animation
+    if (controlsVisible) {
+      // Show controls with slide-up animation
+      binding.controlsContainer.visibility = View.VISIBLE
+      binding.controlsContainer.post {
+        binding.controlsContainer.translationY = binding.controlsContainer.height.toFloat()
+        binding.controlsContainer.animate()
+          .translationY(0f)
+          .setDuration(300)
+          .start()
+      }
+      
+      // If in debug mode, also show debug container
+      if (debugMode) {
+        binding.debugContainer.visibility = View.VISIBLE
+        binding.debugContainer.post {
+          binding.debugContainer.translationY = binding.debugContainer.height.toFloat()
+          binding.debugContainer.animate()
+            .translationY(0f)
+            .setDuration(300)
+            .start()
+        }
+      }
     } else {
-      binding.debugContainer.visibility = View.GONE
+      // Hide controls with slide-down animation
+      binding.controlsContainer.animate()
+        .translationY(binding.controlsContainer.height.toFloat())
+        .setDuration(300)
+        .withEndAction {
+          binding.controlsContainer.visibility = View.GONE
+          binding.controlsContainer.translationY = 0f
+        }
+        .start()
+      
+      // Hide debug container if visible
+      if (binding.debugContainer.visibility == View.VISIBLE) {
+        binding.debugContainer.animate()
+          .translationY(binding.debugContainer.height.toFloat())
+          .setDuration(300)
+          .withEndAction {
+            binding.debugContainer.visibility = View.GONE
+            binding.debugContainer.translationY = 0f
+          }
+          .start()
+      }
     }
   }
 

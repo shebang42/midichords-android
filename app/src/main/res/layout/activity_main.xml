@@ -70,11 +70,13 @@
     <!-- Toggle button for controls - Always visible -->
     <ImageButton
         android:id="@+id/toggleControlsButton"
-        android:layout_width="48dp"
-        android:layout_height="48dp"
-        android:src="@android:drawable/ic_menu_manage"
+        android:layout_width="56dp"
+        android:layout_height="56dp"
+        android:src="@android:drawable/ic_menu_preferences"
         android:background="@drawable/rounded_button"
-        android:contentDescription="Toggle Controls"
+        android:contentDescription="Toggle Controls Panel"
+        android:padding="12dp"
+        android:scaleType="fitCenter"
         android:layout_margin="16dp"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent" />
