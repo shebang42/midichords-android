@@ -93,9 +93,8 @@ class ChordDisplayView @JvmOverloads constructor(
     val centerX = width / 2f
     
     if (currentChord != null) {
-      // Calculate vertical positions based on how many elements to display
-      val hasAlternatives = getFilteredAlternativeNames().isNotEmpty() && showAlternatives
-      val mainChordY = if (hasAlternatives) height * 0.25f else height / 2f - 10f
+      // Use a fixed position for the main chord regardless of alternatives
+      val mainChordY = height * 0.25f
       
       // Draw the main chord name
       textPaint.textSize = 128f
@@ -111,15 +110,16 @@ class ChordDisplayView @JvmOverloads constructor(
       }
       
       if (inversionText.isNotEmpty()) {
-        val inversionY = mainChordY + 70f
-        detailPaint.textSize = 32f
+        val inversionY = mainChordY + 100f  // Increased from 70f to account for larger text
+        detailPaint.textSize = 80f  // Increased from 32f to 80f (2.5x larger)
         canvas.drawText(inversionText, centerX, inversionY, detailPaint)
       }
       
       // Draw alternative names if enabled
+      val hasAlternatives = getFilteredAlternativeNames().isNotEmpty() && showAlternatives
       if (hasAlternatives) {
         val altNames = getFilteredAlternativeNames()
-        val startY = mainChordY + 150f  // Increased from 120f
+        val startY = mainChordY + 200f  // Increased from 150f to account for larger inversion text
         
         // Display jazz name if available
         val jazzName = getJazzName()
@@ -146,7 +146,7 @@ class ChordDisplayView @JvmOverloads constructor(
     } else {
       // Draw the "No Chord" message
       textPaint.textSize = 128f
-      canvas.drawText(noChordMessage, centerX, height / 2f, textPaint)
+      canvas.drawText(noChordMessage, centerX, height * 0.25f, textPaint)
     }
   }
 
