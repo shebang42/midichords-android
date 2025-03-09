@@ -209,11 +209,4 @@ class MainViewModel(application: Application) : AndroidViewModel(application), M
     
     Log.d(TAG, "MainViewModel cleared and resources cleaned up")
   }
-}
-
-enum class ConnectionState {
-  DISCONNECTED,
-  CONNECTING,
-  CONNECTED,
-  ERROR
 } 

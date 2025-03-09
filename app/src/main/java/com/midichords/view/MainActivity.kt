@@ -9,7 +9,7 @@ import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.ViewModelProvider
 import com.midichords.databinding.ActivityMainBinding
-import com.midichords.viewmodel.ConnectionState
+import com.midichords.midi.ConnectionState
 import com.midichords.viewmodel.MainViewModel
 
 class MainActivity : AppCompatActivity() {
