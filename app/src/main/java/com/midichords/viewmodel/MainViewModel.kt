@@ -4,6 +4,7 @@ import android.app.Application
 import android.content.Context
 import android.media.midi.MidiManager
 import android.hardware.usb.UsbManager
+import android.hardware.usb.UsbDevice
 import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.LiveData
@@ -69,7 +70,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application), M
 
   fun connectToDevice(device: UsbDevice) {
     try {
-      midiDeviceManager?.connectToDevice(device) ?: run {
+      midiDeviceManager?.connectToUsbDevice(device) ?: run {
         Log.e(TAG, "Cannot connect - MIDI manager not initialized")
         _connectionMessage.value = "MIDI system not available"
       }

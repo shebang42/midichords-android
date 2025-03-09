@@ -9,7 +9,11 @@ import android.hardware.usb.UsbDevice
 import android.hardware.usb.UsbManager
 import android.media.midi.MidiDevice
 import android.media.midi.MidiDeviceInfo
+import android.media.midi.MidiInputPort
 import android.media.midi.MidiManager
+import android.media.midi.MidiReceiver
+import android.media.midi.MidiSender
+import android.os.Handler
 import android.util.Log
 import java.util.concurrent.CopyOnWriteArrayList
 
@@ -28,6 +32,7 @@ class MidiDeviceManagerImpl(
   private var currentDevice: MidiDevice? = null
   private val midiInputProcessor = MidiInputProcessorImpl()
   private var currentDeviceInfo: MidiDeviceInfo? = null
+  private var currentInputPort: MidiInputPort? = null
 
   private val usbReceiver = object : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
@@ -77,7 +82,9 @@ class MidiDeviceManagerImpl(
     context.registerReceiver(
       usbReceiver,
       filter,
-      Context.RECEIVER_NOT_EXPORTED
+      null,
+      Handler(context.mainLooper),
+      Context.RECEIVER_EXPORTED
     )
 
     Log.d(TAG, "MidiDeviceManager initialized")
@@ -130,8 +137,17 @@ class MidiDeviceManagerImpl(
     try {
       val inputPort = device.openInputPort(0)
       if (inputPort != null) {
-        inputPort.connect(midiInputProcessor.getReceiver())
-        Log.d(TAG, "MIDI input port connected")
+        // Store the input port
+        currentInputPort = inputPort
+        
+        // Store the input port in the processor
+        midiInputProcessor.setInputPort(inputPort)
+        
+        // For MIDI input ports, we don't need to establish a connection
+        // The device will send MIDI data to our app, and we'll process it in the MidiReceiver
+        
+        Log.d(TAG, "MIDI input port opened successfully")
+        notifyListeners(ConnectionState.CONNECTED, "MIDI input port opened successfully")
       } else {
         Log.e(TAG, "Failed to open MIDI input port")
         notifyListeners(ConnectionState.ERROR, "Failed to open MIDI input port")
@@ -142,7 +158,7 @@ class MidiDeviceManagerImpl(
     }
   }
 
-  private fun connectToUsbDevice(usbDevice: UsbDevice) {
+  override fun connectToUsbDevice(usbDevice: UsbDevice) {
     try {
       midiManager?.devices?.forEach { deviceInfo ->
         if (deviceInfo.type == MidiDeviceInfo.TYPE_USB) {
@@ -173,6 +189,8 @@ class MidiDeviceManagerImpl(
 
   override fun disconnect() {
     try {
+      currentInputPort?.close()
+      currentInputPort = null
       currentDevice?.close()
       currentDevice = null
       currentDeviceInfo = null
