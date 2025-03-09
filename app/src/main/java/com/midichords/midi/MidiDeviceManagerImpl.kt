@@ -9,6 +9,7 @@ import android.hardware.usb.*
 import android.media.midi.MidiDevice
 import android.media.midi.MidiDeviceInfo
 import android.media.midi.MidiManager
+import android.media.midi.MidiOutputPort
 import android.os.Build
 import android.os.Bundle
 import android.os.Handler
@@ -40,16 +41,19 @@ class MidiDeviceManagerImpl(
 
   private val mainHandler = Handler(Looper.getMainLooper())
   private val pendingIntentFlags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE
+    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
   } else {
     PendingIntent.FLAG_UPDATE_CURRENT
   }
 
   private val listeners = CopyOnWriteArrayList<ConnectionStateListener>()
+  private val midiEventListeners = CopyOnWriteArrayList<MidiEventListener>()
   private var currentDevice: UsbDevice? = null
   private var midiDevice: MidiDevice? = null
   private var permissionIntent: PendingIntent? = null
   private var deviceCallback: MidiManager.DeviceCallback? = null
+  private var midiInputProcessor: MidiInputProcessor? = null
+  private var midiOutputPort: MidiOutputPort? = null
 
   private val usbReceiver = object : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
@@ -98,7 +102,10 @@ class MidiDeviceManagerImpl(
     try {
       // Register USB receiver
       Log.d(TAG, "Initializing MidiDeviceManager")
-      permissionIntent = PendingIntent.getBroadcast(context, 0, Intent(ACTION_USB_PERMISSION), pendingIntentFlags)
+      val intent = Intent(ACTION_USB_PERMISSION).apply {
+        setPackage(context.packageName)  // Make the intent explicit
+      }
+      permissionIntent = PendingIntent.getBroadcast(context, 0, intent, pendingIntentFlags)
       val filter = IntentFilter().apply {
         addAction(ACTION_USB_PERMISSION)
         addAction(UsbManager.ACTION_USB_DEVICE_ATTACHED)
@@ -120,6 +127,16 @@ class MidiDeviceManagerImpl(
 
   override fun unregisterListener(listener: ConnectionStateListener) {
     listeners.remove(listener)
+  }
+
+  override fun registerMidiEventListener(listener: MidiEventListener) {
+    midiEventListeners.addIfAbsent(listener)
+    midiInputProcessor?.registerListener(listener)
+  }
+
+  override fun unregisterMidiEventListener(listener: MidiEventListener) {
+    midiEventListeners.remove(listener)
+    midiInputProcessor?.unregisterListener(listener)
   }
 
   override fun requestPermission(device: UsbDevice) {
@@ -210,6 +227,7 @@ class MidiDeviceManagerImpl(
           Log.d(TAG, "Successfully opened MIDI device")
           midiDevice = device
           currentDevice = getConnectedDevice()
+          setupMidiPorts(device)
           notifyListeners(ConnectionState.CONNECTED)
         } else {
           Log.e(TAG, "Failed to open MIDI device")
@@ -222,6 +240,31 @@ class MidiDeviceManagerImpl(
     }
   }
 
+  private fun setupMidiPorts(device: MidiDevice) {
+    try {
+      // Create a new input processor for this device
+      midiInputProcessor = MidiInputProcessorImpl().also { processor ->
+        // Register existing listeners with the new processor
+        midiEventListeners.forEach { listener ->
+          processor.registerListener(listener)
+        }
+      }
+
+      // Open the first input port (from device to app)
+      val portCount = device.info.inputPortCount
+      if (portCount > 0) {
+        midiOutputPort = device.openOutputPort(0)
+        midiOutputPort?.connect(midiInputProcessor?.getReceiver())
+        Log.d(TAG, "Connected to MIDI input port")
+      } else {
+        Log.w(TAG, "Device has no input ports")
+      }
+    } catch (e: Exception) {
+      Log.e(TAG, "Error setting up MIDI ports", e)
+      notifyListeners(ConnectionState.ERROR, "Error setting up MIDI ports: ${e.message}")
+    }
+  }
+
   override fun disconnect() {
     try {
       Log.d(TAG, "Disconnecting MIDI device")
@@ -229,9 +272,13 @@ class MidiDeviceManagerImpl(
         midiManager?.unregisterDeviceCallback(callback)
         deviceCallback = null
       }
+      midiOutputPort?.disconnect(midiInputProcessor?.getReceiver())
+      midiOutputPort?.close()
+      midiOutputPort = null
       midiDevice?.close()
       midiDevice = null
       currentDevice = null
+      midiInputProcessor = null
       notifyListeners(ConnectionState.DISCONNECTED)
     } catch (e: Exception) {
       Log.e(TAG, "Error disconnecting device", e)
@@ -265,6 +312,7 @@ class MidiDeviceManagerImpl(
         Log.w(TAG, "USB receiver was not registered")
       }
       listeners.clear()
+      midiEventListeners.clear()
     } catch (e: Exception) {
       Log.e(TAG, "Error disposing MidiDeviceManager", e)
     }

@@ -19,6 +19,18 @@ interface MidiDeviceManager {
   fun unregisterListener(listener: ConnectionStateListener)
 
   /**
+   * Register a listener for MIDI events.
+   * @param listener The listener to register
+   */
+  fun registerMidiEventListener(listener: MidiEventListener)
+
+  /**
+   * Unregister a previously registered MIDI event listener.
+   * @param listener The listener to unregister
+   */
+  fun unregisterMidiEventListener(listener: MidiEventListener)
+
+  /**
    * Request permission to connect to a USB MIDI device.
    * @param device The USB device to request permission for
    */
