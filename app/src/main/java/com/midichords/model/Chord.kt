@@ -57,6 +57,9 @@ data class Chord(
    * @return Alternative chord name or null if no alternative exists
    */
   fun getAlternativeName(useFlats: Boolean = false): String? {
+    // Define rootName for use within this method
+    val rootName = root.getName(useFlats)
+    
     // Check for common alternative interpretations
     return when {
       // C/E can also be seen as Em7/C in some contexts
