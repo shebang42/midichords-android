@@ -49,12 +49,30 @@ class ChordDisplayView @JvmOverloads constructor(
     isAntiAlias = true
   }
   
+  private val altNamePaint = Paint().apply {
+    color = Color.parseColor("#555555")
+    textSize = 32f
+    typeface = Typeface.create(Typeface.DEFAULT, Typeface.ITALIC)
+    textAlign = Paint.Align.CENTER
+    isAntiAlias = true
+  }
+  
   // Background rectangle for chord display
   private val backgroundRect = RectF()
   
   // Current chord to display
   private var currentChord: Chord? = null
   private var noChordMessage = "No Chord"
+  
+  // Flag to control whether to show alternative names
+  private var showAlternatives = true
+  
+  // List of alternative names that should be excluded (too weird/uncommon)
+  private val excludedPatterns = listOf(
+    "dim7(no5)",    // Overly specific
+    ".*\\(4ths\\)", // Quartal descriptions are too technical
+    ".*\\(add.*"    // Add descriptions are often too complex
+  )
 
   override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
     super.onSizeChanged(w, h, oldw, oldh)
@@ -73,33 +91,125 @@ class ChordDisplayView @JvmOverloads constructor(
     
     // Draw chord name or "No Chord" message
     val centerX = width / 2f
-    val centerY = height / 2f - 10f  // Adjust for visual centering with subtexts
     
     if (currentChord != null) {
-      // Draw the chord name
+      // Calculate vertical positions based on how many elements to display
+      val hasAlternatives = getFilteredAlternativeNames().isNotEmpty() && showAlternatives
+      val mainChordY = if (hasAlternatives) height * 0.35f else height / 2f - 10f
+      
+      // Draw the main chord name
       textPaint.textSize = 128f
-      canvas.drawText(currentChord!!.getName(), centerX, centerY, textPaint)
+      canvas.drawText(currentChord!!.getName(), centerX, mainChordY, textPaint)
       
-      // Draw additional info like full name and inversion
-      val detailsY = centerY + 80f
-      
-      // Create detail text combining full name and inversion if applicable
-      val fullName = currentChord!!.getFullName()
-      val inversion = when(currentChord!!.inversion) {
-        0 -> "Root Position"
-        1 -> "First Inversion"
-        2 -> "Second Inversion"
-        3 -> "Third Inversion"
-        else -> "Inversion ${currentChord!!.inversion}"
+      // Draw inversion details
+      val inversionText = when(currentChord!!.inversion) {
+        0 -> ""
+        1 -> "1st inv."
+        2 -> "2nd inv."
+        3 -> "3rd inv."
+        else -> "${currentChord!!.inversion}th inv."
       }
       
-      val detailText = "$fullName - $inversion"
-      canvas.drawText(detailText, centerX, detailsY, detailPaint)
+      if (inversionText.isNotEmpty()) {
+        val inversionY = mainChordY + 70f
+        detailPaint.textSize = 32f
+        canvas.drawText(inversionText, centerX, inversionY, detailPaint)
+      }
+      
+      // Draw alternative names if enabled
+      if (hasAlternatives) {
+        val altNames = getFilteredAlternativeNames()
+        val startY = mainChordY + 120f
+        
+        // Display jazz name if available
+        val jazzName = getJazzName()
+        if (jazzName != null && !altNames.contains(jazzName)) {
+          altNames.add(0, jazzName)
+        }
+        
+        // Limit to 3 alternative names
+        val displayNames = altNames.take(3)
+        
+        // Display "Also known as:" text
+        altNamePaint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
+        canvas.drawText("Also known as:", centerX, startY, altNamePaint)
+        
+        // Draw alternative names
+        altNamePaint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.ITALIC)
+        displayNames.forEachIndexed { index, name ->
+          val y = startY + 40f + (index * 40f)
+          canvas.drawText(name, centerX, y, altNamePaint)
+        }
+      }
     } else {
       // Draw the "No Chord" message
       textPaint.textSize = 128f
-      canvas.drawText(noChordMessage, centerX, centerY, textPaint)
+      canvas.drawText(noChordMessage, centerX, height / 2f, textPaint)
     }
+  }
+
+  /**
+   * Get filtered list of alternative names that aren't too weird
+   */
+  private fun getFilteredAlternativeNames(): MutableList<String> {
+    val altNames = mutableListOf<String>()
+    val chord = currentChord ?: return altNames
+    
+    // Add the primary alternative name
+    val altName = chord.getAlternativeName()
+    if (altName != null && isReasonableAltName(altName)) {
+      altNames.add(altName)
+    }
+    
+    // Add flat notation version if using sharps, or vice versa
+    val currentUsingFlats = chord.getName().contains('b')
+    val altWithDifferentNotation = if (currentUsingFlats) {
+      chord.getName(useFlats = false)
+    } else {
+      chord.getName(useFlats = true)
+    }
+    
+    // Only add if it's different from the main name
+    if (altWithDifferentNotation != chord.getName() && isReasonableAltName(altWithDifferentNotation)) {
+      altNames.add(altWithDifferentNotation)
+    }
+    
+    return altNames
+  }
+  
+  /**
+   * Get jazz-specific name if it's different from the standard name
+   */
+  private fun getJazzName(): String? {
+    val chord = currentChord ?: return null
+    val jazzName = chord.getJazzName()
+    
+    // Only return if different from standard name and reasonable
+    return if (jazzName != chord.getName() && isReasonableAltName(jazzName)) {
+      jazzName
+    } else {
+      null
+    }
+  }
+  
+  /**
+   * Check if an alternative name is reasonable (not too weird/complex)
+   */
+  private fun isReasonableAltName(name: String): Boolean {
+    // Check against excluded patterns
+    for (pattern in excludedPatterns) {
+      if (name.matches(Regex(pattern))) {
+        return false
+      }
+    }
+    
+    // Additional filtering criteria
+    if (name.length > 12) {
+      // Too long names are likely too complex
+      return false
+    }
+    
+    return true
   }
 
   /**
@@ -116,5 +226,20 @@ class ChordDisplayView @JvmOverloads constructor(
   fun setNoChordMessage(message: String) {
     noChordMessage = message
     invalidate() // Request redraw if no chord is currently displayed
+  }
+  
+  /**
+   * Enable or disable showing alternative names
+   */
+  fun setShowAlternatives(show: Boolean) {
+    showAlternatives = show
+    invalidate()
+  }
+  
+  /**
+   * Check if alternative names are currently being shown
+   */
+  fun isShowingAlternatives(): Boolean {
+    return showAlternatives
   }
 } 

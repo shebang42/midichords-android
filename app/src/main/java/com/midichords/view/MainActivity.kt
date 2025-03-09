@@ -117,8 +117,21 @@ class MainActivity : AppCompatActivity() {
       }
     }
     
-    // Set up no chord message
+    // Set up chord display
     binding.chordDisplayView.setNoChordMessage("-")
+    binding.chordDisplayView.setShowAlternatives(true)  // Enable showing alternative names
+    
+    // Add long-press listener to toggle alternative names
+    binding.chordDisplayView.setOnLongClickListener {
+      val currentState = binding.chordDisplayView.isShowingAlternatives()
+      binding.chordDisplayView.setShowAlternatives(!currentState)
+      
+      // Show toast message about the change
+      val message = if (!currentState) "Alternative names enabled" else "Alternative names disabled"
+      Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
+      
+      true
+    }
   }
   
   private fun toggleControlsVisibility() {
