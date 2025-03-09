@@ -33,6 +33,7 @@ class MainActivity : AppCompatActivity() {
 
   companion object {
     private const val TAG = "MainActivity"
+    private const val PERMISSION_REQUEST_CODE = 1001
   }
 
   override fun onCreate(savedInstanceState: Bundle?) {
