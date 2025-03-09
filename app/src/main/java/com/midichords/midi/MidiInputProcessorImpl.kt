@@ -36,164 +36,146 @@ class MidiInputProcessorImpl : MidiInputProcessor {
     }
   }
 
-  override fun processMidiData(data: ByteArray, offset: Int, length: Int, timestamp: Long): MidiEvent? {
-    if (length < 1) {
-      Log.w(TAG, "processMidiData: Data length too short (${length})")
-      return null
-    }
-
+  /**
+   * Process raw MIDI data from a USB device
+   * USB MIDI data format is typically 4 bytes per message:
+   * Byte 0: Header (0x0n where n is the cable number)
+   * Byte 1-3: MIDI message
+   */
+  override fun processMidiData(data: ByteArray, offset: Int, count: Int, timestamp: Long): MidiEvent? {
     try {
-      // Log the raw bytes for debugging
-      val hexData = data.slice(offset until offset + length).joinToString(" ") { 
+      Log.d(TAG, "Processing ${count} bytes of MIDI data")
+      
+      // Log the raw data for debugging
+      val hexData = data.slice(offset until offset + count).joinToString(" ") { 
         "0x${it.toInt().and(0xFF).toString(16).padStart(2, '0')}" 
       }
-      Log.d(TAG, "Processing MIDI data: $hexData")
+      Log.d(TAG, "Raw MIDI data: $hexData")
       
-      // Check for USB-MIDI format (4 bytes per message)
-      if (length >= 4 && (data[offset].toInt() and 0xF0) == 0x00) {
-        // This might be USB-MIDI format (4 bytes per message)
-        // Byte 0: Cable Number (CN) and Code Index Number (CIN)
-        // Bytes 1-3: MIDI data
-        val cin = data[offset].toInt() and 0x0F
-        
-        // Check if this is a valid CIN
-        if (cin >= 0x08 && cin <= 0x0E) {
-          Log.d(TAG, "Detected USB-MIDI format, CIN: $cin")
+      var latestEvent: MidiEvent? = null
+      
+      // Process USB MIDI packets (4 bytes each)
+      var i = offset
+      while (i < offset + count) {
+        // Check if we have at least 4 bytes (USB MIDI packet)
+        if (i + 3 < offset + count) {
+          // USB MIDI packet format:
+          // Byte 0: Header (0x0n where n is the cable number)
+          // Byte 1-3: MIDI message
           
-          // Extract the MIDI data
-          val statusByte = data[offset + 1]
-          val data1 = data[offset + 2].toInt() and 0xFF
-          val data2 = data[offset + 3].toInt() and 0xFF
+          val header = data[i].toInt() and 0xFF
+          val status = data[i + 1].toInt() and 0xFF
+          val data1 = data[i + 2].toInt() and 0xFF
+          val data2 = data[i + 3].toInt() and 0xFF
           
-          // Parse the status byte
-          val command = statusByte.toInt() and 0xF0
-          val channel = statusByte.toInt() and 0x0F
+          Log.d(TAG, "USB MIDI packet: Header=0x${header.toString(16)}, Status=0x${status.toString(16)}, Data1=0x${data1.toString(16)}, Data2=0x${data2.toString(16)}")
           
-          Log.d(TAG, "USB-MIDI: Command: 0x${command.toString(16)}, Channel: $channel, Data1: $data1, Data2: $data2")
-          
-          return when (command) {
-            0x80 -> { // Note Off
-              Log.d(TAG, "USB-MIDI Note Off: note=$data1, velocity=$data2")
-              MidiEvent(
-                type = MidiEventType.NOTE_OFF,
-                channel = channel,
-                data1 = data1,
-                data2 = data2,
-                timestamp = timestamp
-              )
-            }
-            0x90 -> { // Note On
-              Log.d(TAG, "USB-MIDI Note On: note=$data1, velocity=$data2")
-              MidiEvent(
-                type = MidiEventType.NOTE_ON,
-                channel = channel,
-                data1 = data1,
-                data2 = data2,
-                timestamp = timestamp
-              )
-            }
-            0xB0 -> { // Control Change
-              Log.d(TAG, "USB-MIDI Control Change: controller=$data1, value=$data2")
-              MidiEvent(
-                type = MidiEventType.CONTROL_CHANGE,
-                channel = channel,
-                data1 = data1,
-                data2 = data2,
-                timestamp = timestamp
-              )
-            }
-            else -> {
-              Log.w(TAG, "Unsupported USB-MIDI command: 0x${command.toString(16)}")
-              null
-            }
+          // Extract the MIDI message
+          val event = processMidiMessage(status, data1, data2, timestamp)
+          if (event != null) {
+            latestEvent = event
+            // Dispatch the event to listeners
+            dispatchEvent(event)
           }
+          
+          i += 4 // Move to the next USB MIDI packet
+        } else {
+          // Not enough bytes for a complete USB MIDI packet
+          Log.d(TAG, "Incomplete USB MIDI packet, skipping ${offset + count - i} bytes")
+          break
         }
       }
       
-      // If not USB-MIDI format, try standard MIDI format
-      var currentOffset = offset
-      val statusByte = data[currentOffset]
-      Log.d(TAG, "Processing status byte: 0x${statusByte.toInt().and(0xFF).toString(16)}")
-
-      // If this is a data byte and we have a running status, use the last status byte
-      val actualStatusByte = if (statusByte < 0x80.toByte()) {
-        Log.d(TAG, "Using running status: ${lastStatusByte?.let { "0x${it.toInt().and(0xFF).toString(16)}" } ?: "none"}")
-        lastStatusByte ?: run {
-          Log.w(TAG, "No running status available for data byte")
-          return null // No running status available
+      // Also try to process as regular MIDI data (not USB MIDI)
+      if (latestEvent == null && count >= 2) {
+        // Try to interpret as standard MIDI message
+        val status = data[offset].toInt() and 0xFF
+        val data1 = if (offset + 1 < offset + count) data[offset + 1].toInt() and 0xFF else 0
+        val data2 = if (offset + 2 < offset + count) data[offset + 2].toInt() and 0xFF else 0
+        
+        Log.d(TAG, "Trying standard MIDI message: Status=0x${status.toString(16)}, Data1=0x${data1.toString(16)}, Data2=0x${data2.toString(16)}")
+        
+        val event = processMidiMessage(status, data1, data2, timestamp)
+        if (event != null) {
+          latestEvent = event
+          // Dispatch the event to listeners
+          dispatchEvent(event)
         }
-      } else {
-        currentOffset++ // Move past status byte
-        statusByte.also { lastStatusByte = it }
       }
+      
+      return latestEvent
+    } catch (e: Exception) {
+      Log.e(TAG, "Error processing MIDI data", e)
+      return null
+    }
+  }
 
-      // Get the remaining length after processing the status byte
-      val remainingLength = length - (currentOffset - offset)
-      if (remainingLength < 1) {
-        Log.w(TAG, "Insufficient data after status byte")
+  /**
+   * Process a single MIDI message
+   */
+  private fun processMidiMessage(status: Int, data1: Int, data2: Int, timestamp: Long): MidiEvent? {
+    try {
+      // Check if this is a status byte (MSB set)
+      if (status < 0x80) {
+        Log.d(TAG, "Not a status byte: 0x${status.toString(16)}")
         return null
       }
-
-      val command = (actualStatusByte.toInt() and 0xF0)
-      val channel = (actualStatusByte.toInt() and 0x0F)
-      Log.d(TAG, "Command: 0x${command.toString(16)}, Channel: $channel")
-
+      
+      val command = status and 0xF0
+      val channel = status and 0x0F
+      
+      Log.d(TAG, "MIDI message: Command=0x${command.toString(16)}, Channel=$channel, Data1=$data1, Data2=$data2")
+      
       return when (command) {
         0x80 -> { // Note Off
-          if (remainingLength < 2) {
-            Log.w(TAG, "Insufficient data for Note Off message")
-            return null
-          }
-          val note = data[currentOffset].toInt() and 0xFF
-          val velocity = data[currentOffset + 1].toInt() and 0xFF
-          Log.d(TAG, "Note Off: note=$note, velocity=$velocity")
+          Log.d(TAG, "Note Off: note=$data1, velocity=$data2")
           MidiEvent(
             type = MidiEventType.NOTE_OFF,
             channel = channel,
-            data1 = note,
-            data2 = velocity,
+            data1 = data1,
+            data2 = data2,
             timestamp = timestamp
           )
         }
         0x90 -> { // Note On
-          if (remainingLength < 2) {
-            Log.w(TAG, "Insufficient data for Note On message")
-            return null
+          // Note On with velocity 0 is equivalent to Note Off
+          if (data2 == 0) {
+            Log.d(TAG, "Note On with velocity 0 (treated as Note Off): note=$data1")
+            MidiEvent(
+              type = MidiEventType.NOTE_OFF,
+              channel = channel,
+              data1 = data1,
+              data2 = 0,
+              timestamp = timestamp
+            )
+          } else {
+            Log.d(TAG, "Note On: note=$data1, velocity=$data2")
+            MidiEvent(
+              type = MidiEventType.NOTE_ON,
+              channel = channel,
+              data1 = data1,
+              data2 = data2,
+              timestamp = timestamp
+            )
           }
-          val note = data[currentOffset].toInt() and 0xFF
-          val velocity = data[currentOffset + 1].toInt() and 0xFF
-          Log.d(TAG, "Note On: note=$note, velocity=$velocity")
-          MidiEvent(
-            type = MidiEventType.NOTE_ON,
-            channel = channel,
-            data1 = note,
-            data2 = velocity,
-            timestamp = timestamp
-          )
         }
         0xB0 -> { // Control Change
-          if (remainingLength < 2) {
-            Log.w(TAG, "Insufficient data for Control Change message")
-            return null
-          }
-          val controller = data[currentOffset].toInt() and 0xFF
-          val value = data[currentOffset + 1].toInt() and 0xFF
-          Log.d(TAG, "Control Change: controller=$controller, value=$value")
+          Log.d(TAG, "Control Change: controller=$data1, value=$data2")
           MidiEvent(
             type = MidiEventType.CONTROL_CHANGE,
             channel = channel,
-            data1 = controller,
-            data2 = value,
+            data1 = data1,
+            data2 = data2,
             timestamp = timestamp
           )
         }
         else -> {
-          Log.w(TAG, "Unsupported command: 0x${command.toString(16)}")
-          null // Unsupported command
+          Log.d(TAG, "Unsupported command: 0x${command.toString(16)}")
+          null
         }
       }
     } catch (e: Exception) {
-      Log.e(TAG, "Error processing MIDI data", e)
+      Log.e(TAG, "Error processing MIDI message", e)
       return null
     }
   }
