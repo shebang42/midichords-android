@@ -78,13 +78,13 @@ class ChordDisplayView @JvmOverloads constructor(
     if (currentChord != null) {
       // Draw the chord name
       textPaint.textSize = 128f
-      canvas.drawText(currentChord!!.toString(), centerX, centerY, textPaint)
+      canvas.drawText(currentChord!!.getName(), centerX, centerY, textPaint)
       
       // Draw additional info like full name and inversion
       val detailsY = centerY + 80f
       
       // Create detail text combining full name and inversion if applicable
-      val fullName = currentChord!!.fullName
+      val fullName = currentChord!!.getFullName()
       val inversion = when(currentChord!!.inversion) {
         0 -> "Root Position"
         1 -> "First Inversion"
